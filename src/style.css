@@ -1,0 +1,115 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(229, 9, 20, 0.18), transparent 38%),
+    linear-gradient(180deg, #121212 0%, #0a0a0a 100%);
+  color: #f5f5f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 380px;
+  min-height: 520px;
+  background: transparent;
+  color: inherit;
+}
+
+button {
+  font: inherit;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+}
+
+.popup-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.popup-header p,
+.summary,
+.watch-card-meta,
+.watch-card-time,
+.empty-state p {
+  margin: 0;
+  color: #c5c7ce;
+  line-height: 1.5;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.button {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  background: #e50914;
+  color: #fff;
+}
+
+.button-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.watch-card,
+.empty-state {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  padding: 14px;
+}
+
+.watch-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.watch-card-title,
+.empty-state h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.watch-card-actions {
+  display: flex;
+  justify-content: flex-start;
+}

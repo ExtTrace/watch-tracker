@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Anime Netflix Tracker",
+  "description": "Track anime and series watched on Netflix directly in the browser and store the history locally.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://www.netflix.com/*"],
+  "action": {
+    "default_title": "Anime Netflix Tracker",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
