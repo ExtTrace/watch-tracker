@@ -1,6 +1,11 @@
 import './style.css';
 
-import type { AllowedYouTubeChannel, AnimeDomain, MediaItem, Platform } from './types/media';
+import type {
+  AllowedYouTubeChannel,
+  AnimeDomain,
+  MediaItem,
+  Platform,
+} from './types/media';
 import {
   clearMediaStorage,
   getAnimeDomains,
@@ -35,7 +40,8 @@ type AnimeDomainDraft = {
 const app = document.querySelector<HTMLDivElement>('#app');
 const currentUrl = new URL(window.location.href);
 const initialViewParam = currentUrl.searchParams.get('view');
-const isStandaloneDomainsView = currentUrl.searchParams.get('standalone') === '1';
+const isStandaloneDomainsView =
+  currentUrl.searchParams.get('standalone') === '1';
 
 if (!app) {
   throw new Error('Popup root element #app was not found.');
@@ -47,7 +53,7 @@ const state = {
   view:
     initialViewParam === 'channels' || initialViewParam === 'domains'
       ? initialViewParam
-      : 'history' as ViewValue,
+      : ('history' as ViewValue),
   youtubeChannelModalOpen: false,
   youtubeChannelDraft: {
     id: null,
@@ -199,7 +205,11 @@ function createBadge(platform: Platform): HTMLElement {
   const badge = document.createElement('span');
   badge.className = `platform-badge platform-${platform}`;
   badge.textContent =
-    platform === 'netflix' ? 'Netflix' : platform === 'youtube' ? 'YouTube' : 'Custom';
+    platform === 'netflix'
+      ? 'Netflix'
+      : platform === 'youtube'
+        ? 'YouTube'
+        : 'Custom';
   return badge;
 }
 
@@ -273,9 +283,13 @@ function getValidatedYouTubeChannelDraft(): YouTubeChannelDraft {
   };
 }
 
-async function saveYouTubeChannelFromDraft(channels: AllowedYouTubeChannel[]): Promise<void> {
+async function saveYouTubeChannelFromDraft(
+  channels: AllowedYouTubeChannel[],
+): Promise<void> {
   const nextDraft = getValidatedYouTubeChannelDraft();
-  const normalizedHandle = nextDraft.handle ? normalizeChannelHandle(nextDraft.handle) : null;
+  const normalizedHandle = nextDraft.handle
+    ? normalizeChannelHandle(nextDraft.handle)
+    : null;
   const existingChannel = channels.find((channel) => {
     if (channel.id === nextDraft.id) {
       return true;
@@ -339,7 +353,9 @@ function startAnimeDomainEdit(domain: AnimeDomain): void {
 
 function getValidatedAnimeDomainDraft(): AnimeDomainDraft {
   const name = state.animeDomainDraft.name.trim().replace(/\s+/g, ' ');
-  const currentDomain = normalizeCurrentDomainInput(state.animeDomainDraft.currentDomain);
+  const currentDomain = normalizeCurrentDomainInput(
+    state.animeDomainDraft.currentDomain,
+  );
   const hostname = normalizeDomainInput(state.animeDomainDraft.hostname);
 
   if (!name) {
@@ -362,9 +378,7 @@ function getValidatedAnimeDomainDraft(): AnimeDomainDraft {
   };
 }
 
-function buildAnimeDomainBase(
-  domains: AnimeDomain[],
-): {
+function buildAnimeDomainBase(domains: AnimeDomain[]): {
   nextDraft: AnimeDomainDraft;
   existingDomain: AnimeDomain | undefined;
   baseDomain: AnimeDomain;
@@ -383,7 +397,10 @@ function buildAnimeDomainBase(
       hostname: nextDraft.hostname,
       grantedOrigin: existingDomain?.grantedOrigin ?? null,
       enabled: true,
-      createdAt: nextDraft.createdAt ?? existingDomain?.createdAt ?? new Date().toISOString(),
+      createdAt:
+        nextDraft.createdAt ??
+        existingDomain?.createdAt ??
+        new Date().toISOString(),
     },
   };
 }
@@ -397,14 +414,19 @@ function mergeAnimeDomains(
       return false;
     }
 
-    return !sameAnimeDomainHostname(existingDomain.hostname, nextDomain.hostname);
+    return !sameAnimeDomainHostname(
+      existingDomain.hostname,
+      nextDomain.hostname,
+    );
   });
 
   filteredDomains.push(nextDomain);
   return filteredDomains;
 }
 
-async function requestAnimeDomainPermission(currentDomain: string): Promise<string> {
+async function requestAnimeDomainPermission(
+  currentDomain: string,
+): Promise<string> {
   const normalizedCurrentDomain = normalizeCurrentDomainInput(currentDomain);
   const exactOrigin = `https://${normalizedCurrentDomain}/*`;
   const wildcardOrigin = `https://*.${normalizedCurrentDomain}/*`;
@@ -417,7 +439,11 @@ async function requestAnimeDomainPermission(currentDomain: string): Promise<stri
 
   const granted = await new Promise<boolean>((resolve, reject) => {
     if (!chrome.permissions?.request) {
-      reject(new Error('chrome.permissions.request is unavailable in this popup context.'));
+      reject(
+        new Error(
+          'chrome.permissions.request is unavailable in this popup context.',
+        ),
+      );
       return;
     }
 
@@ -448,9 +474,13 @@ async function requestAnimeDomainPermission(currentDomain: string): Promise<stri
   return exactOrigin;
 }
 
-async function injectTrackerIntoActiveTabIfNeeded(hostnameKeyword: string): Promise<void> {
+async function injectTrackerIntoActiveTabIfNeeded(
+  hostnameKeyword: string,
+): Promise<void> {
   if (!chrome.tabs?.query || !chrome.scripting?.executeScript) {
-    console.debug(`${DEBUG_PREFIX} active tab injection skipped: API unavailable`);
+    console.debug(
+      `${DEBUG_PREFIX} active tab injection skipped: API unavailable`,
+    );
     return;
   }
 
@@ -459,17 +489,26 @@ async function injectTrackerIntoActiveTabIfNeeded(hostnameKeyword: string): Prom
     currentWindow: true,
   });
   if (!activeTab?.id || !activeTab.url) {
-    console.debug(`${DEBUG_PREFIX} active tab injection skipped: no active tab`);
+    console.debug(
+      `${DEBUG_PREFIX} active tab injection skipped: no active tab`,
+    );
     return;
   }
 
   try {
     const parsedUrl = new URL(activeTab.url);
-    if (!normalizeDomainInput(parsedUrl.hostname).includes(normalizeDomainInput(hostnameKeyword))) {
-      console.debug(`${DEBUG_PREFIX} active tab injection skipped: hostname mismatch`, {
-        activeHostname: parsedUrl.hostname,
-        hostnameKeyword,
-      });
+    if (
+      !normalizeDomainInput(parsedUrl.hostname).includes(
+        normalizeDomainInput(hostnameKeyword),
+      )
+    ) {
+      console.debug(
+        `${DEBUG_PREFIX} active tab injection skipped: hostname mismatch`,
+        {
+          activeHostname: parsedUrl.hostname,
+          hostnameKeyword,
+        },
+      );
       return;
     }
 
@@ -498,16 +537,23 @@ async function injectTrackerIntoActiveTabIfNeeded(hostnameKeyword: string): Prom
 
 async function notifyBackgroundToInjectCustomDomain(): Promise<void> {
   if (!chrome.runtime?.sendMessage) {
-    console.debug(`${DEBUG_PREFIX} background notify skipped: sendMessage unavailable`);
+    console.debug(
+      `${DEBUG_PREFIX} background notify skipped: sendMessage unavailable`,
+    );
     return;
   }
 
   try {
-    console.debug(`${DEBUG_PREFIX} requesting background custom domain refresh`);
+    console.debug(
+      `${DEBUG_PREFIX} requesting background custom domain refresh`,
+    );
     const response = await chrome.runtime.sendMessage({
       type: 'anime-watch-tracker:refresh-custom-injection',
     });
-    console.debug(`${DEBUG_PREFIX} background custom domain refresh response`, response);
+    console.debug(
+      `${DEBUG_PREFIX} background custom domain refresh response`,
+      response,
+    );
   } catch {
     console.warn(`${DEBUG_PREFIX} background custom domain refresh failed`);
     return;
@@ -515,7 +561,8 @@ async function notifyBackgroundToInjectCustomDomain(): Promise<void> {
 }
 
 async function saveAnimeDomainFromDraft(domains: AnimeDomain[]): Promise<void> {
-  const { nextDraft, existingDomain, baseDomain } = buildAnimeDomainBase(domains);
+  const { nextDraft, existingDomain, baseDomain } =
+    buildAnimeDomainBase(domains);
 
   console.debug(`${DEBUG_PREFIX} anime domain save submitted`, {
     nextDraft,
@@ -523,7 +570,9 @@ async function saveAnimeDomainFromDraft(domains: AnimeDomain[]): Promise<void> {
     currentDomainCount: domains.length,
   });
 
-  const grantedOrigin = await requestAnimeDomainPermission(nextDraft.currentDomain);
+  const grantedOrigin = await requestAnimeDomainPermission(
+    nextDraft.currentDomain,
+  );
   await upsertAnimeDomain({
     ...baseDomain,
     grantedOrigin,
@@ -540,7 +589,11 @@ async function saveAnimeDomainFromDraft(domains: AnimeDomain[]): Promise<void> {
   closeAnimeDomainModal();
   resetAnimeDomainDraft();
   await renderPopup();
-  window.alert(nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.');
+  window.alert(
+    nextDraft.id || existingDomain
+      ? 'Anime domain updated.'
+      : 'Anime domain saved.',
+  );
 }
 
 function saveAnimeDomainFromPopup(domains: AnimeDomain[]): void {
@@ -568,11 +621,14 @@ function saveAnimeDomainFromPopup(domains: AnimeDomain[]): void {
   const nextDomains = mergeAnimeDomains(domains, baseDomain);
   void setAnimeDomains(nextDomains);
 
-  console.debug(`${DEBUG_PREFIX} anime domain saved from popup before permission`, {
-    nextDraft,
-    existingDomain,
-    requestPermissionNow: state.animeDomainRequestPermission,
-  });
+  console.debug(
+    `${DEBUG_PREFIX} anime domain saved from popup before permission`,
+    {
+      nextDraft,
+      existingDomain,
+      requestPermissionNow: state.animeDomainRequestPermission,
+    },
+  );
 
   if (!state.animeDomainRequestPermission) {
     closeAnimeDomainModal();
@@ -595,14 +651,20 @@ function saveAnimeDomainFromPopup(domains: AnimeDomain[]): void {
       closeAnimeDomainModal();
       resetAnimeDomainDraft();
       await renderPopup();
-      window.alert(nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.');
+      window.alert(
+        nextDraft.id || existingDomain
+          ? 'Anime domain updated.'
+          : 'Anime domain saved.',
+      );
     })
     .catch((error: unknown) => {
       console.warn(
-        `${DEBUG_PREFIX} anime domain popup permission failed ${stringifyForLog({
-          draft: nextDraft,
-          errorMessage: describeUnknownError(error),
-        })}`,
+        `${DEBUG_PREFIX} anime domain popup permission failed ${stringifyForLog(
+          {
+            draft: nextDraft,
+            errorMessage: describeUnknownError(error),
+          },
+        )}`,
       );
     });
 }
@@ -633,10 +695,10 @@ function buildMetadataText(item: MediaItem): string {
   }
 
   if (item.platform === 'custom') {
-    return [item.siteName, item.hostname].filter(Boolean).join(' - ');
+    return [item.episode, item.siteName].filter(Boolean).join(' - ');
   }
 
-  return [item.channel, item.episode].filter(Boolean).join(' - ');
+  return [item.episode, item.channel].filter(Boolean).join(' - ');
 }
 
 function buildNetflixEpisodeStatusText(item: MediaItem): string | null {
@@ -673,10 +735,7 @@ function createYouTubeChannelRow(channel: AllowedYouTubeChannel): HTMLElement {
 
   const meta = document.createElement('p');
   meta.className = 'channel-item-meta';
-  meta.textContent = [
-    channel.handle,
-    channel.enabled ? 'Enabled' : 'Disabled',
-  ]
+  meta.textContent = [channel.handle, channel.enabled ? 'Enabled' : 'Disabled']
     .filter(Boolean)
     .join(' - ');
 
@@ -734,7 +793,8 @@ function createYouTubeChannelsSection(
   if (channels.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'channel-list-empty';
-    empty.textContent = 'Belum ada channel. Tambahkan satu channel untuk mulai tracking YouTube.';
+    empty.textContent =
+      'Belum ada channel. Tambahkan satu channel untuk mulai tracking YouTube.';
     list.append(empty);
   } else {
     for (const channel of channels) {
@@ -751,7 +811,9 @@ function createYouTubeChannelsSection(
   return section;
 }
 
-function createYouTubeChannelModal(channels: AllowedYouTubeChannel[]): HTMLElement {
+function createYouTubeChannelModal(
+  channels: AllowedYouTubeChannel[],
+): HTMLElement {
   const overlay = document.createElement('div');
   overlay.className = 'domain-modal-overlay';
 
@@ -760,11 +822,14 @@ function createYouTubeChannelModal(channels: AllowedYouTubeChannel[]): HTMLEleme
 
   const title = document.createElement('h3');
   title.className = 'domain-form-title';
-  title.textContent = state.youtubeChannelDraft.id ? 'Edit YouTube Channel' : 'Add YouTube Channel';
+  title.textContent = state.youtubeChannelDraft.id
+    ? 'Edit YouTube Channel'
+    : 'Add YouTube Channel';
 
   const copy = document.createElement('p');
   copy.className = 'channels-panel-copy';
-  copy.textContent = 'Hanya channel enabled yang akan dipakai untuk tracking video YouTube.';
+  copy.textContent =
+    'Hanya channel enabled yang akan dipakai untuk tracking video YouTube.';
 
   const nameLabel = document.createElement('label');
   nameLabel.className = 'domain-label';
@@ -795,26 +860,39 @@ function createYouTubeChannelModal(channels: AllowedYouTubeChannel[]): HTMLEleme
   const actions = document.createElement('div');
   actions.className = 'domain-form-actions';
   actions.append(
-    createButton('Save Channel', () => {
-      void saveYouTubeChannelFromDraft(channels).catch((error: unknown) => {
-        const message = describeUnknownError(error) || 'Failed to save YouTube channel.';
-        console.warn(
-          `${DEBUG_PREFIX} youtube channel save failed ${stringifyForLog({
-            draft: state.youtubeChannelDraft,
-            errorMessage: message,
-            rawError: describeUnknownError(error),
-          })}`,
-        );
-        window.alert(message);
-      });
-    }, 'primary'),
+    createButton(
+      'Save Channel',
+      () => {
+        void saveYouTubeChannelFromDraft(channels).catch((error: unknown) => {
+          const message =
+            describeUnknownError(error) || 'Failed to save YouTube channel.';
+          console.warn(
+            `${DEBUG_PREFIX} youtube channel save failed ${stringifyForLog({
+              draft: state.youtubeChannelDraft,
+              errorMessage: message,
+              rawError: describeUnknownError(error),
+            })}`,
+          );
+          window.alert(message);
+        });
+      },
+      'primary',
+    ),
     createButton('Cancel', () => {
       closeYouTubeChannelModal();
       void renderPopup();
     }),
   );
 
-  dialog.append(title, copy, nameLabel, nameInput, handleLabel, handleInput, actions);
+  dialog.append(
+    title,
+    copy,
+    nameLabel,
+    nameInput,
+    handleLabel,
+    handleInput,
+    actions,
+  );
   overlay.append(dialog);
   return overlay;
 }
@@ -834,7 +912,9 @@ function createAnimeDomainRow(domain: AnimeDomain): HTMLElement {
   meta.className = 'channel-item-meta';
   meta.textContent = [
     domain.hostname,
-    domain.grantedOrigin ? normalizeCurrentDomainInput(domain.grantedOrigin) : 'Permission belum diberikan',
+    domain.grantedOrigin
+      ? normalizeCurrentDomainInput(domain.grantedOrigin)
+      : 'Permission belum diberikan',
     domain.enabled ? 'Enabled' : 'Disabled',
   ]
     .filter(Boolean)
@@ -861,9 +941,7 @@ function createAnimeDomainRow(domain: AnimeDomain): HTMLElement {
   return item;
 }
 
-function createAnimeDomainsSection(
-  domains: AnimeDomain[],
-): HTMLElement {
+function createAnimeDomainsSection(domains: AnimeDomain[]): HTMLElement {
   const section = document.createElement('section');
   section.className = 'channels-panel';
 
@@ -897,7 +975,8 @@ function createAnimeDomainsSection(
   if (domains.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'channel-list-empty';
-    empty.textContent = 'Belum ada domain anime. Tambahkan satu domain untuk mulai tracking situs custom.';
+    empty.textContent =
+      'Belum ada domain anime. Tambahkan satu domain untuk mulai tracking situs custom.';
     list.append(empty);
   } else {
     for (const domain of domains) {
@@ -923,7 +1002,9 @@ function createAnimeDomainModal(domains: AnimeDomain[]): HTMLElement {
 
   const title = document.createElement('h3');
   title.className = 'domain-form-title';
-  title.textContent = state.animeDomainDraft.id ? 'Edit Anime Domain' : 'Add Anime Domain';
+  title.textContent = state.animeDomainDraft.id
+    ? 'Edit Anime Domain'
+    : 'Add Anime Domain';
 
   const copy = document.createElement('p');
   copy.className = 'channels-panel-copy';
@@ -991,19 +1072,24 @@ function createAnimeDomainModal(domains: AnimeDomain[]): HTMLElement {
   actions.className = 'domain-form-actions';
   if (isStandaloneDomainsView) {
     actions.append(
-      createButton('Save Domain', () => {
-        void saveAnimeDomainFromDraft(domains).catch((error: unknown) => {
-          const message = describeUnknownError(error) || 'Failed to save anime domain.';
-          console.warn(
-            `${DEBUG_PREFIX} anime domain save failed ${stringifyForLog({
-              draft: state.animeDomainDraft,
-              errorMessage: message,
-              rawError: describeUnknownError(error),
-            })}`,
-          );
-          window.alert(message);
-        });
-      }, 'primary'),
+      createButton(
+        'Save Domain',
+        () => {
+          void saveAnimeDomainFromDraft(domains).catch((error: unknown) => {
+            const message =
+              describeUnknownError(error) || 'Failed to save anime domain.';
+            console.warn(
+              `${DEBUG_PREFIX} anime domain save failed ${stringifyForLog({
+                draft: state.animeDomainDraft,
+                errorMessage: message,
+                rawError: describeUnknownError(error),
+              })}`,
+            );
+            window.alert(message);
+          });
+        },
+        'primary',
+      ),
       createButton('Cancel', () => {
         closeAnimeDomainModal();
         void renderPopup();
@@ -1011,7 +1097,11 @@ function createAnimeDomainModal(domains: AnimeDomain[]): HTMLElement {
     );
   } else {
     actions.append(
-      createButton('Save Domain', () => saveAnimeDomainFromPopup(domains), 'primary'),
+      createButton(
+        'Save Domain',
+        () => saveAnimeDomainFromPopup(domains),
+        'primary',
+      ),
       createButton('Cancel', () => {
         closeAnimeDomainModal();
         void renderPopup();
@@ -1166,7 +1256,9 @@ async function renderPopup(): Promise<void> {
       .then(() => renderPopup())
       .catch((error: unknown) => {
         const message =
-          error instanceof Error ? error.message : 'Failed to import JSON file.';
+          error instanceof Error
+            ? error.message
+            : 'Failed to import JSON file.';
         window.alert(message);
       })
       .finally(() => {

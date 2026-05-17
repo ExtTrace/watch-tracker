@@ -112,6 +112,73 @@ function extractTitle(): string | null {
   );
 }
 
+function normalizeUrl(value: string): string {
+  try {
+    const parsedUrl = new URL(value, window.location.origin);
+    parsedUrl.hash = '';
+    parsedUrl.search = '';
+    return parsedUrl.toString();
+  } catch {
+    return value;
+  }
+}
+
+function extractEpisodeCandidateTexts(): string[] {
+  const values = [
+    cleanText(document.querySelector<HTMLElement>('h1.entry-title')?.textContent),
+    cleanText(document.querySelector<HTMLElement>('h1')?.textContent),
+    cleanText(document.querySelector<HTMLElement>('.entry-title')?.textContent),
+    cleanText(document.querySelector<HTMLElement>('.infozingle')?.textContent),
+    cleanText(document.querySelector<HTMLElement>('.episodelist')?.textContent),
+    getMetaContent('meta[property="og:title"]'),
+    cleanText(document.title),
+    window.location.pathname.replace(/[-_/]+/g, ' '),
+  ];
+
+  return values.filter((value): value is string => Boolean(value));
+}
+
+function extractEpisode(): string | null {
+  const episodePatterns = [
+    /\b(?:episode|ep|eps)\.?\s*(\d{1,4})\b/i,
+    /\bepisode\s*[-:]?\s*(special|ova|movie)\b/i,
+  ];
+
+  for (const value of extractEpisodeCandidateTexts()) {
+    for (const pattern of episodePatterns) {
+      const match = value.match(pattern);
+      if (!match?.[1]) {
+        continue;
+      }
+
+      const episodeValue = match[1].toUpperCase();
+      return /^\d+$/.test(episodeValue) ? `Episode ${episodeValue}` : `Episode ${episodeValue}`;
+    }
+  }
+
+  return null;
+}
+
+function cleanSeriesTitle(value: string): string {
+  const episodePattern = /\b(?:episode|ep|eps)\.?\s*(\d{1,4}|special|ova|movie)\b/i;
+  const episodeMatch = value.match(episodePattern);
+  const beforeEpisode =
+    episodeMatch?.index !== undefined ? value.slice(0, episodeMatch.index) : value;
+
+  return beforeEpisode
+    .replace(/\bsubtitle\s*indonesia\b/gi, '')
+    .replace(/\bsub\s*indo(?:nesia)?\b/gi, '')
+    .replace(/\botakudesu\b/gi, '')
+    .replace(/\s*[-|:]+\s*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractSeriesTitle(rawTitle: string): string {
+  const seriesTitle = cleanSeriesTitle(rawTitle);
+  return seriesTitle || rawTitle.trim();
+}
+
 function extractThumbnail(): string | null {
   return getMetaContent('meta[property="og:image"]');
 }
@@ -137,7 +204,7 @@ function extractPublishedAt(): string | null {
 }
 
 function extractCanonicalUrl(): string {
-  return (
+  return normalizeUrl(
     document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ??
     window.location.href
   );
@@ -160,6 +227,55 @@ function extractVideoSourceUrl(): string | null {
   }
 
   return null;
+}
+
+function hasEmbeddedPlayer(): boolean {
+  if (document.querySelector('video, video source')) {
+    return true;
+  }
+
+  const iframeCandidates = document.querySelectorAll<HTMLIFrameElement>('iframe[src]');
+  for (const iframe of iframeCandidates) {
+    const src = iframe.src.toLowerCase();
+    if (
+      src &&
+      !src.startsWith('about:blank') &&
+      !/doubleclick|googlesyndication|googleads|disqus|facebook\.com\/plugins/i.test(src)
+    ) {
+      return true;
+    }
+  }
+
+  return Boolean(
+    document.querySelector(
+      '[class*="player"], [id*="player"], [class*="stream"], [id*="stream"]',
+    ),
+  );
+}
+
+function isLikelyListingPage(rawTitle: string, canonicalUrl: string): boolean {
+  const normalizedTitle = rawTitle.toLowerCase();
+  const normalizedUrl = canonicalUrl.toLowerCase();
+
+  return (
+    /\b(daftar episode|episode list|list episode|batch|complete|jadwal rilis|daftar anime|home|beranda)\b/i.test(
+      normalizedTitle,
+    ) ||
+    /\/(daftar-anime|complete-series|jadwal-rilis|genre|batch)\b/i.test(normalizedUrl)
+  );
+}
+
+function isTrackableEpisodePage(rawTitle: string, canonicalUrl: string): boolean {
+  if (isLikelyListingPage(rawTitle, canonicalUrl)) {
+    return false;
+  }
+
+  const episode = extractEpisode();
+  if (!episode) {
+    return false;
+  }
+
+  return hasEmbeddedPlayer();
 }
 
 function findMatchingAnimeDomain(
@@ -205,16 +321,28 @@ export async function extractGenericAnimeWatchData(): Promise<MediaItem | null> 
     return null;
   }
 
-  const normalizedHost = normalizeTitle(normalizedCurrentHostname);
-  const normalizedTitle = normalizeTitle(title);
   const canonicalUrl = extractCanonicalUrl();
+  if (!isTrackableEpisodePage(title, canonicalUrl)) {
+    return null;
+  }
+
+  const episode = extractEpisode();
+  if (!episode) {
+    return null;
+  }
+
+  const seriesTitle = extractSeriesTitle(title);
+  const normalizedHost = normalizeTitle(normalizedCurrentHostname);
+  const normalizedTitle = normalizeTitle(seriesTitle);
+  const normalizedEpisode = normalizeTitle(episode);
   const videoSourceUrl = extractVideoSourceUrl();
 
   return {
-    id: `anime-domain-${normalizedHost}-${normalizedTitle}`,
+    id: `anime-domain-${normalizedHost}-${normalizedTitle}-${normalizedEpisode}`,
     platform: 'custom',
-    title,
+    title: seriesTitle,
     url: canonicalUrl,
+    episode,
     thumbnail: extractThumbnail(),
     publishedAt: extractPublishedAt(),
     siteName: matchedDomain.name,
