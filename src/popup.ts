@@ -1,50 +1,104 @@
 import './style.css';
 
-import { defaultWatchStorage, getWatchStorage, setWatchStorage } from './lib/storage';
-import type { WatchItem } from './types/watch';
+import type { AllowedYouTubeChannel, AnimeDomain, MediaItem, Platform } from './types/media';
+import {
+  clearMediaStorage,
+  getAnimeDomains,
+  getMediaStorage,
+  getYouTubeChannels,
+  importMediaItems,
+  removeAnimeDomain,
+  removeMediaItem,
+  removeYouTubeChannel,
+  upsertAnimeDomain,
+  upsertYouTubeChannel,
+} from './utils/storage';
 
-const NETFLIX_HOME_URL = 'https://www.netflix.com/browse';
+type FilterValue = 'all' | Platform;
+type ViewValue = 'history' | 'channels' | 'domains';
+const DEBUG_PREFIX = '[Anime Watch Tracker]';
+type YouTubeChannelDraft = {
+  id: string | null;
+  createdAt?: string;
+  name: string;
+  handle: string;
+};
+type AnimeDomainDraft = {
+  id: string | null;
+  createdAt?: string;
+  name: string;
+  currentDomain: string;
+  hostname: string;
+};
+
 const app = document.querySelector<HTMLDivElement>('#app');
+const currentUrl = new URL(window.location.href);
+const initialViewParam = currentUrl.searchParams.get('view');
+const isStandaloneDomainsView = currentUrl.searchParams.get('standalone') === '1';
 
 if (!app) {
   throw new Error('Popup root element #app was not found.');
 }
 
 const popupRoot = app;
+const state = {
+  filter: 'all' as FilterValue,
+  view:
+    initialViewParam === 'channels' || initialViewParam === 'domains'
+      ? initialViewParam
+      : 'history' as ViewValue,
+  youtubeChannelModalOpen: false,
+  youtubeChannelDraft: {
+    id: null,
+    name: '',
+    handle: '',
+  } as YouTubeChannelDraft,
+  animeDomainModalOpen: isStandaloneDomainsView,
+  animeDomainDraft: {
+    id: currentUrl.searchParams.get('domainId'),
+    createdAt: currentUrl.searchParams.get('createdAt') ?? undefined,
+    name: currentUrl.searchParams.get('name') ?? '',
+    currentDomain: currentUrl.searchParams.get('currentDomain') ?? '',
+    hostname: currentUrl.searchParams.get('hostname') ?? '',
+  } as AnimeDomainDraft,
+};
 
 const dateFormatter = new Intl.DateTimeFormat('id-ID', {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
 
-function isWatchItem(value: unknown): value is WatchItem {
-  if (!value || typeof value !== 'object') {
-    return false;
+const publishedDateFormatter = new Intl.DateTimeFormat('id-ID', {
+  dateStyle: 'medium',
+});
+
+function describeUnknownError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
   }
 
-  const item = value as Partial<WatchItem>;
-  return (
-    typeof item.id === 'string' &&
-    typeof item.title === 'string' &&
-    typeof item.url === 'string' &&
-    typeof item.lastWatchedAt === 'string' &&
-    item.source === 'netflix'
-  );
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
-function normalizeImportedItems(items: WatchItem[]): WatchItem[] {
-  const byId = new Map<string, WatchItem>();
-
-  for (const item of items) {
-    const existingItem = byId.get(item.id);
-    if (!existingItem || Date.parse(item.lastWatchedAt) >= Date.parse(existingItem.lastWatchedAt)) {
-      byId.set(item.id, item);
-    }
+function stringifyForLog(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
   }
-
-  return [...byId.values()].sort(
-    (left, right) => Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
-  );
 }
 
 function formatWatchTime(value: string): string {
@@ -56,41 +110,51 @@ function formatWatchTime(value: string): string {
   return dateFormatter.format(new Date(timestamp));
 }
 
+function formatPublishedDate(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  return publishedDateFormatter.format(new Date(timestamp));
+}
+
 function openUrl(url: string): void {
   chrome.tabs.create({ url });
 }
 
-function downloadJsonFile(items: WatchItem[]): void {
-  const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json' });
+function downloadJsonFile(items: MediaItem[]): void {
+  const blob = new Blob([JSON.stringify({ items }, null, 2)], {
+    type: 'application/json',
+  });
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = downloadUrl;
-  anchor.download = `anime-netflix-tracker-${new Date().toISOString()}.json`;
+  anchor.download = `anime-watch-tracker-${new Date().toISOString()}.json`;
   anchor.click();
   URL.revokeObjectURL(downloadUrl);
-}
-
-async function clearHistory(): Promise<void> {
-  await setWatchStorage(defaultWatchStorage);
-  await renderPopup();
 }
 
 async function importJsonFile(file: File): Promise<void> {
   const text = await file.text();
   const parsed = JSON.parse(text) as { items?: unknown };
-  const importedItems = Array.isArray(parsed.items) ? parsed.items.filter(isWatchItem) : [];
+  const importedItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const importedCount = await importMediaItems(importedItems);
 
-  if (importedItems.length === 0) {
+  if (importedCount === 0) {
     throw new Error('No valid watch items found in the selected JSON file.');
   }
-
-  const currentStorage = await getWatchStorage();
-  const mergedItems = normalizeImportedItems([...currentStorage.items, ...importedItems]);
-  await setWatchStorage({ items: mergedItems });
-  await renderPopup();
 }
 
-function createActionButton(label: string, onClick: () => void, variant = 'secondary'): HTMLButtonElement {
+function createButton(
+  label: string,
+  onClick: () => void,
+  variant: 'primary' | 'secondary' = 'secondary',
+): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `button button-${variant}`;
@@ -99,29 +163,881 @@ function createActionButton(label: string, onClick: () => void, variant = 'secon
   return button;
 }
 
-function createWatchCard(item: WatchItem): HTMLElement {
+function createFilterButton(
+  label: string,
+  value: FilterValue,
+): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `filter-chip${state.filter === value ? ' is-active' : ''}`;
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    state.filter = value;
+    void renderPopup();
+  });
+  return button;
+}
+
+function createViewTabButton(
+  label: string,
+  value: ViewValue,
+): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `view-tab${state.view === value ? ' is-active' : ''}`;
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    state.view = value;
+    void renderPopup();
+  });
+  return button;
+}
+
+function createBadge(platform: Platform): HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = `platform-badge platform-${platform}`;
+  badge.textContent =
+    platform === 'netflix' ? 'Netflix' : platform === 'youtube' ? 'YouTube' : 'Custom';
+  return badge;
+}
+
+function normalizeChannelHandle(value: string): string {
+  return `@${value.trim().replace(/^@/, '').replace(/\s+/g, '')}`;
+}
+
+function normalizeDomainInput(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/.*$/, '')
+    .replace(/\/$/, '');
+}
+
+function normalizeCurrentDomainInput(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\/$/, '');
+}
+
+function sameAnimeDomainHostname(left: string, right: string): boolean {
+  return normalizeDomainInput(left) === normalizeDomainInput(right);
+}
+
+function buildAnimeDomainManagerUrl(): string {
+  const managerUrl = new URL(chrome.runtime.getURL('popup.html'));
+  managerUrl.searchParams.set('view', 'domains');
+  managerUrl.searchParams.set('standalone', '1');
+
+  if (state.animeDomainDraft.id) {
+    managerUrl.searchParams.set('domainId', state.animeDomainDraft.id);
+  }
+
+  if (state.animeDomainDraft.createdAt) {
+    managerUrl.searchParams.set('createdAt', state.animeDomainDraft.createdAt);
+  }
+
+  if (state.animeDomainDraft.name) {
+    managerUrl.searchParams.set('name', state.animeDomainDraft.name);
+  }
+
+  if (state.animeDomainDraft.currentDomain) {
+    managerUrl.searchParams.set('currentDomain', state.animeDomainDraft.currentDomain);
+  }
+
+  if (state.animeDomainDraft.hostname) {
+    managerUrl.searchParams.set('hostname', state.animeDomainDraft.hostname);
+  }
+
+  return managerUrl.toString();
+}
+
+function openAnimeDomainManagerWindow(): void {
+  const managerUrl = buildAnimeDomainManagerUrl();
+
+  if (!chrome.windows?.create) {
+    chrome.tabs.create({ url: managerUrl });
+    return;
+  }
+
+  chrome.windows.create({
+    url: managerUrl,
+    type: 'popup',
+    focused: true,
+    width: 520,
+    height: 760,
+  });
+}
+
+function resetYouTubeChannelDraft(): void {
+  state.youtubeChannelDraft = {
+    id: null,
+    name: '',
+    handle: '',
+  };
+}
+
+function closeYouTubeChannelModal(): void {
+  state.youtubeChannelModalOpen = false;
+}
+
+function openYouTubeChannelModal(channel?: AllowedYouTubeChannel): void {
+  if (channel) {
+    state.youtubeChannelDraft = {
+      id: channel.id,
+      createdAt: channel.createdAt,
+      name: channel.name,
+      handle: channel.handle ?? '',
+    };
+  } else {
+    resetYouTubeChannelDraft();
+  }
+
+  state.youtubeChannelModalOpen = true;
+  void renderPopup();
+}
+
+function getValidatedYouTubeChannelDraft(): YouTubeChannelDraft {
+  const name = state.youtubeChannelDraft.name.trim().replace(/\s+/g, ' ');
+  if (!name) {
+    throw new Error('Channel name is required.');
+  }
+
+  const handle = state.youtubeChannelDraft.handle.trim();
+
+  return {
+    ...state.youtubeChannelDraft,
+    name,
+    handle,
+  };
+}
+
+async function saveYouTubeChannelFromDraft(channels: AllowedYouTubeChannel[]): Promise<void> {
+  const nextDraft = getValidatedYouTubeChannelDraft();
+  const normalizedHandle = nextDraft.handle ? normalizeChannelHandle(nextDraft.handle) : null;
+  const existingChannel = channels.find((channel) => {
+    if (channel.id === nextDraft.id) {
+      return true;
+    }
+
+    if (normalizedHandle && channel.handle) {
+      return normalizeChannelHandle(channel.handle) === normalizedHandle;
+    }
+
+    return channel.name.trim().toLowerCase() === nextDraft.name.toLowerCase();
+  });
+
+  await upsertYouTubeChannel({
+    id: nextDraft.id ?? existingChannel?.id ?? `youtube-channel-${Date.now()}`,
+    name: nextDraft.name,
+    handle: normalizedHandle ? `@${normalizedHandle}` : null,
+    enabled: existingChannel?.enabled ?? true,
+    createdAt: nextDraft.createdAt ?? existingChannel?.createdAt,
+  });
+
+  closeYouTubeChannelModal();
+  resetYouTubeChannelDraft();
+  await renderPopup();
+}
+
+function resetAnimeDomainDraft(): void {
+  state.animeDomainDraft = {
+    id: null,
+    name: '',
+    currentDomain: '',
+    hostname: '',
+  };
+}
+
+function closeAnimeDomainModal(): void {
+  state.animeDomainModalOpen = false;
+}
+
+function openAnimeDomainModal(domain?: AnimeDomain): void {
+  if (domain) {
+    state.animeDomainDraft = {
+      id: domain.id,
+      createdAt: domain.createdAt,
+      name: domain.name,
+      currentDomain: domain.grantedOrigin
+        ? normalizeCurrentDomainInput(domain.grantedOrigin)
+        : '',
+      hostname: domain.hostname,
+    };
+  } else if (!state.animeDomainDraft.id) {
+    resetAnimeDomainDraft();
+  }
+
+  state.animeDomainModalOpen = true;
+  void renderPopup();
+}
+
+function startAnimeDomainEdit(domain: AnimeDomain): void {
+  openAnimeDomainModal(domain);
+}
+
+function getValidatedAnimeDomainDraft(): AnimeDomainDraft {
+  const name = state.animeDomainDraft.name.trim().replace(/\s+/g, ' ');
+  const currentDomain = normalizeCurrentDomainInput(state.animeDomainDraft.currentDomain);
+  const hostname = normalizeDomainInput(state.animeDomainDraft.hostname);
+
+  if (!name) {
+    throw new Error('Domain name is required.');
+  }
+
+  if (!currentDomain) {
+    throw new Error('Current domain is required.');
+  }
+
+  if (!hostname) {
+    throw new Error('Match keyword is required.');
+  }
+
+  return {
+    ...state.animeDomainDraft,
+    name,
+    currentDomain,
+    hostname,
+  };
+}
+
+async function requestAnimeDomainPermission(currentDomain: string): Promise<string> {
+  const normalizedCurrentDomain = normalizeCurrentDomainInput(currentDomain);
+  const exactOrigin = `https://${normalizedCurrentDomain}/*`;
+  const wildcardOrigin = `https://*.${normalizedCurrentDomain}/*`;
+  console.debug(`${DEBUG_PREFIX} requesting anime domain permission`, {
+    currentDomain,
+    normalizedCurrentDomain,
+    exactOrigin,
+    wildcardOrigin,
+  });
+
+  const granted = await new Promise<boolean>((resolve, reject) => {
+    if (!chrome.permissions?.request) {
+      reject(new Error('chrome.permissions.request is unavailable in this popup context.'));
+      return;
+    }
+
+    chrome.permissions.request(
+      {
+        origins: [exactOrigin, wildcardOrigin],
+      },
+      (result) => {
+        if (chrome.runtime.lastError?.message) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        resolve(Boolean(result));
+      },
+    );
+  });
+
+  console.debug(`${DEBUG_PREFIX} anime domain permission result`, {
+    normalizedCurrentDomain,
+    granted,
+  });
+
+  if (!granted) {
+    throw new Error('Permission denied. Domain was not saved.');
+  }
+
+  return exactOrigin;
+}
+
+async function injectTrackerIntoActiveTabIfNeeded(hostnameKeyword: string): Promise<void> {
+  if (!chrome.tabs?.query || !chrome.scripting?.executeScript) {
+    console.debug(`${DEBUG_PREFIX} active tab injection skipped: API unavailable`);
+    return;
+  }
+
+  const [activeTab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  if (!activeTab?.id || !activeTab.url) {
+    console.debug(`${DEBUG_PREFIX} active tab injection skipped: no active tab`);
+    return;
+  }
+
+  try {
+    const parsedUrl = new URL(activeTab.url);
+    if (!normalizeDomainInput(parsedUrl.hostname).includes(normalizeDomainInput(hostnameKeyword))) {
+      console.debug(`${DEBUG_PREFIX} active tab injection skipped: hostname mismatch`, {
+        activeHostname: parsedUrl.hostname,
+        hostnameKeyword,
+      });
+      return;
+    }
+
+    console.debug(`${DEBUG_PREFIX} injecting tracker into active tab`, {
+      tabId: activeTab.id,
+      url: activeTab.url,
+      hostnameKeyword,
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      files: ['content.js'],
+    });
+    console.debug(`${DEBUG_PREFIX} tracker injected into active tab`, {
+      tabId: activeTab.id,
+      url: activeTab.url,
+    });
+  } catch {
+    console.warn(
+      `${DEBUG_PREFIX} active tab injection failed ${stringifyForLog({
+        hostnameKeyword,
+      })}`,
+    );
+    return;
+  }
+}
+
+async function notifyBackgroundToInjectCustomDomain(): Promise<void> {
+  if (!chrome.runtime?.sendMessage) {
+    console.debug(`${DEBUG_PREFIX} background notify skipped: sendMessage unavailable`);
+    return;
+  }
+
+  try {
+    console.debug(`${DEBUG_PREFIX} requesting background custom domain refresh`);
+    const response = await chrome.runtime.sendMessage({
+      type: 'anime-watch-tracker:refresh-custom-injection',
+    });
+    console.debug(`${DEBUG_PREFIX} background custom domain refresh response`, response);
+  } catch {
+    console.warn(`${DEBUG_PREFIX} background custom domain refresh failed`);
+    return;
+  }
+}
+
+async function saveAnimeDomainFromDraft(domains: AnimeDomain[]): Promise<void> {
+  const nextDraft = getValidatedAnimeDomainDraft();
+  const existingDomain = domains.find((domain) =>
+    sameAnimeDomainHostname(domain.hostname, nextDraft.hostname),
+  );
+
+  console.debug(`${DEBUG_PREFIX} anime domain save submitted`, {
+    nextDraft,
+    existingDomain,
+    currentDomainCount: domains.length,
+  });
+
+  const grantedOrigin = await requestAnimeDomainPermission(nextDraft.currentDomain);
+  await upsertAnimeDomain({
+    id: nextDraft.id ?? existingDomain?.id ?? `anime-domain-${Date.now()}`,
+    name: nextDraft.name,
+    hostname: nextDraft.hostname,
+    grantedOrigin,
+    enabled: true,
+    createdAt: nextDraft.createdAt ?? existingDomain?.createdAt,
+  });
+
+  console.debug(`${DEBUG_PREFIX} anime domain saved to storage`, {
+    hostname: nextDraft.hostname,
+    grantedOrigin,
+    mode: nextDraft.id || existingDomain ? 'update-existing' : 'create-new',
+  });
+
+  await injectTrackerIntoActiveTabIfNeeded(nextDraft.hostname);
+  await notifyBackgroundToInjectCustomDomain();
+  closeAnimeDomainModal();
+  resetAnimeDomainDraft();
+  await renderPopup();
+  window.alert(nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.');
+}
+
+// function createThumbnail(item: MediaItem): HTMLElement {
+//   const frame = document.createElement('div');
+//   frame.className = 'watch-thumb';
+
+//   if (item.thumbnail) {
+//     const image = document.createElement('img');
+//     image.src = item.thumbnail;
+//     image.alt = item.title;
+//     image.loading = 'lazy';
+//     frame.append(image);
+//     return frame;
+//   }
+
+//   const fallback = document.createElement('div');
+//   fallback.className = 'watch-thumb-fallback';
+//   fallback.textContent = item.platform === 'netflix' ? 'N' : 'YT';
+//   frame.append(fallback);
+//   return frame;
+// }
+
+function buildMetadataText(item: MediaItem): string {
+  if (item.platform === 'netflix') {
+    return [item.episode, item.episodeTitle].filter(Boolean).join(' - ');
+  }
+
+  if (item.platform === 'custom') {
+    return [item.siteName, item.hostname].filter(Boolean).join(' - ');
+  }
+
+  return [item.channel, item.episode].filter(Boolean).join(' - ');
+}
+
+function buildNetflixEpisodeStatusText(item: MediaItem): string | null {
+  if (item.platform !== 'netflix') {
+    return null;
+  }
+
+  if (item.hasNewEpisode) {
+    return item.nextEpisode
+      ? `New episode available: ${item.nextEpisode}`
+      : 'New episode available';
+  }
+
+  if (item.nextEpisode && item.nextEpisodeAvailableAt) {
+    const formattedDate = formatPublishedDate(item.nextEpisodeAvailableAt);
+    return formattedDate
+      ? `Next episode: ${item.nextEpisode} - ${formattedDate}`
+      : `Next episode: ${item.nextEpisode}`;
+  }
+
+  return null;
+}
+
+function createYouTubeChannelRow(channel: AllowedYouTubeChannel): HTMLElement {
+  const item = document.createElement('article');
+  item.className = 'channel-item';
+
+  const info = document.createElement('div');
+  info.className = 'channel-item-info';
+
+  const name = document.createElement('p');
+  name.className = 'channel-item-name';
+  name.textContent = channel.name;
+
+  const meta = document.createElement('p');
+  meta.className = 'channel-item-meta';
+  meta.textContent = [
+    channel.handle,
+    channel.enabled ? 'Enabled' : 'Disabled',
+  ]
+    .filter(Boolean)
+    .join(' - ');
+
+  info.append(name, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'channel-item-actions';
+  actions.append(
+    createButton(channel.enabled ? 'Disable' : 'Enable', () => {
+      void upsertYouTubeChannel({
+        ...channel,
+        enabled: !channel.enabled,
+      }).then(() => renderPopup());
+    }),
+    createButton('Edit', () => openYouTubeChannelModal(channel)),
+    createButton('Delete', () => {
+      void removeYouTubeChannel(channel.id).then(() => renderPopup());
+    }),
+  );
+
+  item.append(info, actions);
+  return item;
+}
+
+function createYouTubeChannelsSection(
+  channels: AllowedYouTubeChannel[],
+): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'channels-panel';
+
+  const header = document.createElement('div');
+  header.className = 'channels-panel-header';
+
+  const titleGroup = document.createElement('div');
+
+  const title = document.createElement('h2');
+  title.className = 'channels-panel-title';
+  title.textContent = 'YouTube Channels';
+
+  const subtitle = document.createElement('p');
+  subtitle.className = 'channels-panel-copy';
+  subtitle.textContent = 'Hanya video dari channel enabled yang akan disimpan.';
+
+  titleGroup.append(title, subtitle);
+  header.append(
+    titleGroup,
+    createButton('Add Channel', () => {
+      openYouTubeChannelModal();
+    }),
+  );
+
+  const list = document.createElement('div');
+  list.className = 'channel-list';
+
+  if (channels.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'channel-list-empty';
+    empty.textContent = 'Belum ada channel. Tambahkan satu channel untuk mulai tracking YouTube.';
+    list.append(empty);
+  } else {
+    for (const channel of channels) {
+      list.append(createYouTubeChannelRow(channel));
+    }
+  }
+
+  section.append(header, list);
+
+  if (state.youtubeChannelModalOpen) {
+    section.append(createYouTubeChannelModal(channels));
+  }
+
+  return section;
+}
+
+function createYouTubeChannelModal(channels: AllowedYouTubeChannel[]): HTMLElement {
+  const overlay = document.createElement('div');
+  overlay.className = 'domain-modal-overlay';
+
+  const dialog = document.createElement('section');
+  dialog.className = 'domain-modal';
+
+  const title = document.createElement('h3');
+  title.className = 'domain-form-title';
+  title.textContent = state.youtubeChannelDraft.id ? 'Edit YouTube Channel' : 'Add YouTube Channel';
+
+  const copy = document.createElement('p');
+  copy.className = 'channels-panel-copy';
+  copy.textContent = 'Hanya channel enabled yang akan dipakai untuk tracking video YouTube.';
+
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'domain-label';
+  nameLabel.textContent = 'Channel name';
+
+  const nameInput = document.createElement('input');
+  nameInput.className = 'domain-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Channel name, e.g. Muse Indonesia';
+  nameInput.value = state.youtubeChannelDraft.name;
+  nameInput.addEventListener('input', () => {
+    state.youtubeChannelDraft.name = nameInput.value;
+  });
+
+  const handleLabel = document.createElement('label');
+  handleLabel.className = 'domain-label';
+  handleLabel.textContent = 'Channel handle';
+
+  const handleInput = document.createElement('input');
+  handleInput.className = 'domain-input';
+  handleInput.type = 'text';
+  handleInput.placeholder = 'Optional handle, e.g. @MuseIndonesia';
+  handleInput.value = state.youtubeChannelDraft.handle;
+  handleInput.addEventListener('input', () => {
+    state.youtubeChannelDraft.handle = handleInput.value;
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'domain-form-actions';
+  actions.append(
+    createButton('Save Channel', () => {
+      void saveYouTubeChannelFromDraft(channels).catch((error: unknown) => {
+        const message = describeUnknownError(error) || 'Failed to save YouTube channel.';
+        console.warn(
+          `${DEBUG_PREFIX} youtube channel save failed ${stringifyForLog({
+            draft: state.youtubeChannelDraft,
+            errorMessage: message,
+            rawError: describeUnknownError(error),
+          })}`,
+        );
+        window.alert(message);
+      });
+    }, 'primary'),
+    createButton('Cancel', () => {
+      closeYouTubeChannelModal();
+      void renderPopup();
+    }),
+  );
+
+  dialog.append(title, copy, nameLabel, nameInput, handleLabel, handleInput, actions);
+  overlay.append(dialog);
+  return overlay;
+}
+
+function createAnimeDomainRow(domain: AnimeDomain): HTMLElement {
+  const item = document.createElement('article');
+  item.className = 'channel-item';
+
+  const info = document.createElement('div');
+  info.className = 'channel-item-info';
+
+  const name = document.createElement('p');
+  name.className = 'channel-item-name';
+  name.textContent = domain.name;
+
+  const meta = document.createElement('p');
+  meta.className = 'channel-item-meta';
+  meta.textContent = [
+    domain.hostname,
+    domain.grantedOrigin ? normalizeCurrentDomainInput(domain.grantedOrigin) : 'Permission belum diberikan',
+    domain.enabled ? 'Enabled' : 'Disabled',
+  ]
+    .filter(Boolean)
+    .join(' - ');
+
+  info.append(name, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'channel-item-actions';
+  actions.append(
+    createButton(domain.enabled ? 'Disable' : 'Enable', () => {
+      void upsertAnimeDomain({
+        ...domain,
+        enabled: !domain.enabled,
+      }).then(() => renderPopup());
+    }),
+    createButton('Edit', () => startAnimeDomainEdit(domain)),
+    createButton('Delete', () => {
+      void removeAnimeDomain(domain.id).then(() => renderPopup());
+    }),
+  );
+
+  item.append(info, actions);
+  return item;
+}
+
+function createAnimeDomainsSection(
+  domains: AnimeDomain[],
+): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'channels-panel';
+
+  const header = document.createElement('div');
+  header.className = 'channels-panel-header';
+
+  const titleGroup = document.createElement('div');
+
+  const title = document.createElement('h2');
+  title.className = 'channels-panel-title';
+  title.textContent = 'Anime Domains';
+
+  const subtitle = document.createElement('p');
+  subtitle.className = 'channels-panel-copy';
+  subtitle.textContent = isStandaloneDomainsView
+    ? 'Tab ini aman untuk grant permission dan save domain anime.'
+    : 'Tambah atau edit domain lewat dialog, lalu lanjutkan grant permission di tab penuh.';
+
+  titleGroup.append(title, subtitle);
+  header.append(
+    titleGroup,
+    createButton('Add Domain', () => {
+      resetAnimeDomainDraft();
+      openAnimeDomainModal();
+    }),
+  );
+
+  const list = document.createElement('div');
+  list.className = 'channel-list';
+
+  if (domains.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'channel-list-empty';
+    empty.textContent = 'Belum ada domain anime. Tambahkan satu domain untuk mulai tracking situs custom.';
+    list.append(empty);
+  } else {
+    for (const domain of domains) {
+      list.append(createAnimeDomainRow(domain));
+    }
+  }
+
+  section.append(header, list);
+
+  if (state.animeDomainModalOpen) {
+    section.append(createAnimeDomainModal(domains));
+  }
+
+  return section;
+}
+
+function createAnimeDomainModal(domains: AnimeDomain[]): HTMLElement {
+  const overlay = document.createElement('div');
+  overlay.className = 'domain-modal-overlay';
+
+  const dialog = document.createElement('section');
+  dialog.className = 'domain-modal';
+
+  const title = document.createElement('h3');
+  title.className = 'domain-form-title';
+  title.textContent = state.animeDomainDraft.id ? 'Edit Anime Domain' : 'Add Anime Domain';
+
+  const copy = document.createElement('p');
+  copy.className = 'channels-panel-copy';
+  copy.textContent = isStandaloneDomainsView
+    ? 'Klik Save Domain untuk meminta permission dan menyimpan domain.'
+    : 'Klik Continue in Tab agar permission request dilakukan dari tab penuh, bukan popup.';
+
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'domain-label';
+  nameLabel.textContent = 'Domain name';
+
+  const nameInput = document.createElement('input');
+  nameInput.className = 'domain-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Name, e.g. Otakudesu';
+  nameInput.value = state.animeDomainDraft.name;
+  nameInput.addEventListener('input', () => {
+    state.animeDomainDraft.name = nameInput.value;
+  });
+
+  const currentDomainLabel = document.createElement('label');
+  currentDomainLabel.className = 'domain-label';
+  currentDomainLabel.textContent = 'Current domain';
+
+  const currentDomainInput = document.createElement('input');
+  currentDomainInput.className = 'domain-input';
+  currentDomainInput.type = 'text';
+  currentDomainInput.placeholder = 'Current domain, e.g. otakudesu.blog';
+  currentDomainInput.value = state.animeDomainDraft.currentDomain;
+  currentDomainInput.addEventListener('input', () => {
+    state.animeDomainDraft.currentDomain = currentDomainInput.value;
+  });
+
+  const hostnameLabel = document.createElement('label');
+  hostnameLabel.className = 'domain-label';
+  hostnameLabel.textContent = 'Match keyword';
+
+  const hostnameInput = document.createElement('input');
+  hostnameInput.className = 'domain-input';
+  hostnameInput.type = 'text';
+  hostnameInput.placeholder = 'Match keyword, e.g. otakudesu';
+  hostnameInput.value = state.animeDomainDraft.hostname;
+  hostnameInput.addEventListener('input', () => {
+    state.animeDomainDraft.hostname = hostnameInput.value;
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'domain-form-actions';
+  if (isStandaloneDomainsView) {
+    actions.append(
+      createButton('Save Domain', () => {
+        void saveAnimeDomainFromDraft(domains).catch((error: unknown) => {
+          const message = describeUnknownError(error) || 'Failed to save anime domain.';
+          console.warn(
+            `${DEBUG_PREFIX} anime domain save failed ${stringifyForLog({
+              draft: state.animeDomainDraft,
+              errorMessage: message,
+              rawError: describeUnknownError(error),
+            })}`,
+          );
+          window.alert(message);
+        });
+      }, 'primary'),
+      createButton('Cancel', () => {
+        closeAnimeDomainModal();
+        void renderPopup();
+      }),
+    );
+  } else {
+    actions.append(
+      createButton('Continue in Tab', () => {
+        try {
+          void getValidatedAnimeDomainDraft();
+        } catch (error) {
+          const message = describeUnknownError(error);
+          window.alert(message);
+          return;
+        }
+
+        openAnimeDomainManagerWindow();
+      }, 'primary'),
+      createButton('Cancel', () => {
+        closeAnimeDomainModal();
+        void renderPopup();
+      }),
+    );
+  }
+
+  dialog.append(
+    title,
+    copy,
+    nameLabel,
+    nameInput,
+    currentDomainLabel,
+    currentDomainInput,
+    hostnameLabel,
+    hostnameInput,
+    actions,
+  );
+  overlay.append(dialog);
+  return overlay;
+}
+
+function createWatchCard(item: MediaItem): HTMLElement {
   const card = document.createElement('article');
   card.className = 'watch-card';
+
+  const content = document.createElement('div');
+  content.className = 'watch-card-content';
+
+  const badgeRow = document.createElement('div');
+  badgeRow.className = 'watch-card-badge-row';
+  badgeRow.append(createBadge(item.platform));
 
   const title = document.createElement('h2');
   title.className = 'watch-card-title';
   title.textContent = item.title;
 
-  const meta = document.createElement('p');
-  meta.className = 'watch-card-meta';
-  meta.textContent =
-    [item.season, item.episode, item.episodeTitle].filter(Boolean).join(' - ') ||
-    'Episode metadata not available';
+  const metadata = document.createElement('p');
+  metadata.className = 'watch-card-meta';
+  metadata.textContent = buildMetadataText(item) || 'Metadata belum tersedia';
 
-  const timestamp = document.createElement('p');
-  timestamp.className = 'watch-card-time';
-  timestamp.textContent = `Last watched: ${formatWatchTime(item.lastWatchedAt)}`;
+  const watchedAt = document.createElement('p');
+  watchedAt.className = 'watch-card-time';
+  watchedAt.textContent = `Last watched: ${formatWatchTime(item.lastWatchedAt)}`;
 
-  const actions = document.createElement('div');
-  actions.className = 'watch-card-actions';
-  actions.append(createActionButton('Open Netflix', () => openUrl(item.url), 'primary'));
+  const episodeStatus = document.createElement('p');
+  episodeStatus.className = 'watch-card-time';
+  const episodeStatusText = buildNetflixEpisodeStatusText(item);
+  if (episodeStatusText) {
+    episodeStatus.textContent = episodeStatusText;
+  }
 
-  card.append(title, meta, timestamp, actions);
+  const publishedAt = document.createElement('p');
+  publishedAt.className = 'watch-card-time';
+  const publishedText = formatPublishedDate(item.publishedAt);
+  if (publishedText) {
+    publishedAt.textContent = `Published: ${publishedText}`;
+  }
+
+  const footer = document.createElement('div');
+  footer.className = 'watch-card-footer';
+  footer.append(
+    createButton(
+      item.platform === 'netflix'
+        ? 'Open Netflix'
+        : item.platform === 'youtube'
+          ? 'Open YouTube'
+          : 'Open Page',
+      () => openUrl(item.url),
+      'primary',
+    ),
+    createButton(
+      'Delete',
+      () => void removeMediaItem(item.id).then(() => renderPopup()),
+    ),
+  );
+
+  content.append(badgeRow, title, metadata, watchedAt);
+
+  if (episodeStatusText) {
+    content.append(episodeStatus);
+  }
+
+  if (publishedText) {
+    content.append(publishedAt);
+  }
+
+  content.append(footer);
+  card.append(content);
   return card;
 }
 
@@ -133,28 +1049,42 @@ function createEmptyState(): HTMLElement {
   title.textContent = 'Belum ada history';
 
   const description = document.createElement('p');
-  description.textContent = 'Mulai nonton anime atau series di Netflix lewat browser untuk mengisi daftar ini.';
+  description.textContent =
+    'Buka Netflix, YouTube yang diizinkan, atau situs anime custom yang aktif, lalu riwayat akan muncul di sini.';
 
   emptyState.append(title, description);
   return emptyState;
 }
 
+function filterItems(items: MediaItem[]): MediaItem[] {
+  if (state.filter === 'all') {
+    return items;
+  }
+
+  return items.filter((item) => item.platform === state.filter);
+}
+
 async function renderPopup(): Promise<void> {
-  const storage = await getWatchStorage();
+  const [storage, youtubeChannels, animeDomains] = await Promise.all([
+    getMediaStorage(),
+    getYouTubeChannels(),
+    getAnimeDomains(),
+  ]);
   const items = [...storage.items].sort(
-    (left, right) => Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
+    (left, right) =>
+      Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
   );
+  const filteredItems = filterItems(items);
 
   popupRoot.replaceChildren();
 
   const container = document.createElement('main');
-  container.className = 'popup';
+  container.className = 'popup-shell';
 
-  const header = document.createElement('header');
-  header.className = 'popup-header';
-
-  const title = document.createElement('div');
-  title.innerHTML = '<h1>Anime Netflix Tracker</h1><p>Riwayat tontonan Netflix yang tersimpan lokal.</p>';
+  const hero = document.createElement('header');
+  hero.className = 'hero-panel';
+  hero.innerHTML =
+    '<p class="eyebrow">Local Extension</p><h1>Anime Watch Tracker</h1><p class="hero-copy">Riwayat anime dari Netflix dan YouTube tersimpan lokal di browser.</p>';
 
   const actions = document.createElement('div');
   actions.className = 'toolbar';
@@ -168,41 +1098,75 @@ async function renderPopup(): Promise<void> {
       return;
     }
 
-    void importJsonFile(file).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Failed to import JSON file.';
-      window.alert(message);
-    }).finally(() => {
-      importInput.value = '';
-    });
+    void importJsonFile(file)
+      .then(() => renderPopup())
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : 'Failed to import JSON file.';
+        window.alert(message);
+      })
+      .finally(() => {
+        importInput.value = '';
+      });
   });
 
   actions.append(
-    createActionButton('Open Netflix', () => openUrl(NETFLIX_HOME_URL), 'primary'),
-    createActionButton('Import JSON', () => importInput.click()),
-    createActionButton('Export JSON', () => downloadJsonFile(items)),
-    createActionButton('Clear History', () => void clearHistory()),
+    createButton('Import JSON', () => importInput.click()),
+    createButton('Export JSON', () => downloadJsonFile(items)),
+    createButton(
+      'Clear History',
+      () => void clearMediaStorage().then(() => renderPopup()),
+      'primary',
+    ),
   );
 
-  header.append(title, actions);
-  header.append(importInput);
+  const filters = document.createElement('div');
+  filters.className = 'filter-row';
+  filters.append(
+    createFilterButton('All', 'all'),
+    createFilterButton('Netflix', 'netflix'),
+    createFilterButton('YouTube', 'youtube'),
+    createFilterButton('Custom', 'custom'),
+  );
 
-  const summary = document.createElement('p');
-  summary.className = 'summary';
-  summary.textContent = items.length > 0 ? `${items.length} item tersimpan` : 'Belum ada item tersimpan';
+  const tabs = document.createElement('div');
+  tabs.className = 'view-tabs';
+  tabs.append(
+    createViewTabButton('History', 'history'),
+    createViewTabButton('YouTube Channels', 'channels'),
+    createViewTabButton('Anime Domains', 'domains'),
+  );
 
-  const content = document.createElement('section');
-  content.className = 'content';
+  const summary = document.createElement('section');
+  summary.className = 'summary-panel';
+  summary.innerHTML = `<p>${filteredItems.length} shown</p><span>${items.length} total item tersimpan</span>`;
 
-  if (items.length === 0) {
-    content.append(createEmptyState());
-  } else {
-    for (const item of items) {
-      content.append(createWatchCard(item));
+  container.append(hero, tabs);
+
+  if (state.view === 'history') {
+    const content = document.createElement('section');
+    content.className = 'content';
+
+    if (filteredItems.length === 0) {
+      content.append(createEmptyState());
+    } else {
+      for (const item of filteredItems) {
+        content.append(createWatchCard(item));
+      }
     }
+
+    container.append(actions, importInput, filters, summary, content);
+  } else if (state.view === 'channels') {
+    container.append(createYouTubeChannelsSection(youtubeChannels));
+  } else {
+    container.append(createAnimeDomainsSection(animeDomains));
   }
 
-  container.append(header, summary, content);
   popupRoot.append(container);
 }
+
+chrome.storage.onChanged.addListener(() => {
+  void renderPopup();
+});
 
 void renderPopup();
