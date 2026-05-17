@@ -80,6 +80,10 @@ const publishedDateFormatter = new Intl.DateTimeFormat('id-ID', {
   dateStyle: 'medium',
 });
 
+const publishedDayFormatter = new Intl.DateTimeFormat('id-ID', {
+  weekday: 'long',
+});
+
 function describeUnknownError(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -129,6 +133,19 @@ function formatPublishedDate(value: string | null | undefined): string | null {
   }
 
   return publishedDateFormatter.format(new Date(timestamp));
+}
+
+function formatPublishedDay(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return publishedDayFormatter.format(new Date(timestamp));
 }
 
 function openUrl(url: string): void {
@@ -210,6 +227,13 @@ function createBadge(platform: Platform): HTMLElement {
       : platform === 'youtube'
         ? 'YouTube'
         : 'Custom';
+  return badge;
+}
+
+function createUploadDayBadge(day: string): HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = 'platform-badge upload-day-badge';
+  badge.textContent = day;
   return badge;
 }
 
@@ -1140,6 +1164,10 @@ function createWatchCard(item: MediaItem): HTMLElement {
   title.className = 'watch-card-title';
   title.textContent = item.title;
 
+  const titleRow = document.createElement('div');
+  titleRow.className = 'watch-card-title-row';
+  titleRow.append(title);
+
   const metadata = document.createElement('p');
   metadata.className = 'watch-card-meta';
   metadata.textContent = buildMetadataText(item) || 'Metadata belum tersedia';
@@ -1162,6 +1190,11 @@ function createWatchCard(item: MediaItem): HTMLElement {
     publishedAt.textContent = `Published: ${publishedText}`;
   }
 
+  const publishedDayText = formatPublishedDay(item.publishedAt);
+  if (publishedDayText) {
+    titleRow.append(createUploadDayBadge(publishedDayText));
+  }
+
   const footer = document.createElement('div');
   footer.className = 'watch-card-footer';
   footer.append(
@@ -1180,7 +1213,7 @@ function createWatchCard(item: MediaItem): HTMLElement {
     ),
   );
 
-  content.append(badgeRow, title, metadata, watchedAt);
+  content.append(badgeRow, titleRow, metadata, watchedAt);
 
   if (episodeStatusText) {
     content.append(episodeStatus);
