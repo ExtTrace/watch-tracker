@@ -372,6 +372,7 @@ function normalizeMediaItem(value: unknown): MediaItem | null {
     nextEpisode: toNullableString(candidate.nextEpisode),
     nextEpisodeAvailableAt: toNullableString(candidate.nextEpisodeAvailableAt),
     hasNewEpisode: toNullableBoolean(candidate.hasNewEpisode),
+    isArchived: toNullableBoolean(candidate.isArchived),
     lastWatchedAt,
   };
 }
@@ -667,6 +668,22 @@ export async function removeMediaItem(itemId: string): Promise<void> {
   const currentStorage = await getMediaStorage();
   const nextItems = currentStorage.items.filter((item) => item.id !== itemId);
   await setMediaStorage({ items: nextItems });
+}
+
+export async function setMediaItemArchived(itemId: string, isArchived: boolean): Promise<void> {
+  const currentStorage = await getMediaStorage();
+  let updated = false;
+  const nextItems = currentStorage.items.map((item) => {
+    if (item.id === itemId) {
+      updated = true;
+      return { ...item, isArchived };
+    }
+    return item;
+  });
+
+  if (updated) {
+    await setMediaStorage({ items: nextItems });
+  }
 }
 
 export async function importMediaItems(items: unknown[]): Promise<number> {

@@ -16,12 +16,13 @@ import {
   removeMediaItem,
   removeYouTubeChannel,
   setAnimeDomains,
+  setMediaItemArchived,
   upsertAnimeDomain,
   upsertYouTubeChannel,
 } from './utils/storage';
 
 type FilterValue = 'all' | Platform;
-type ViewValue = 'history' | 'channels' | 'domains';
+type ViewValue = 'history' | 'archives' | 'channels' | 'domains';
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
 type YouTubeChannelDraft = {
   id: string | null;
@@ -1212,6 +1213,10 @@ function createWatchCard(item: MediaItem): HTMLElement {
       'primary',
     ),
     createButton(
+      item.isArchived ? 'Batal Arsip' : 'Arsipkan',
+      () => void setMediaItemArchived(item.id, !item.isArchived).then(() => renderPopup()),
+    ),
+    createButton(
       'Delete',
       () => void removeMediaItem(item.id).then(() => renderPopup()),
     ),
@@ -1248,11 +1253,19 @@ function createEmptyState(): HTMLElement {
 }
 
 function filterItems(items: MediaItem[]): MediaItem[] {
-  if (state.filter === 'all') {
-    return items;
+  const platformFiltered = state.filter === 'all' 
+    ? items 
+    : items.filter((item) => item.platform === state.filter);
+
+  if (state.view === 'archives') {
+    return platformFiltered.filter((item) => item.isArchived);
   }
 
-  return items.filter((item) => item.platform === state.filter);
+  if (state.view === 'history') {
+    return platformFiltered.filter((item) => !item.isArchived);
+  }
+
+  return platformFiltered;
 }
 
 async function renderPopup(): Promise<void> {
@@ -1326,6 +1339,7 @@ async function renderPopup(): Promise<void> {
   tabs.className = 'view-tabs';
   tabs.append(
     createViewTabButton('History', 'history'),
+    createViewTabButton('Archives', 'archives'),
     createViewTabButton('YouTube Channels', 'channels'),
     createViewTabButton('Anime Domains', 'domains'),
   );
@@ -1336,12 +1350,21 @@ async function renderPopup(): Promise<void> {
 
   container.append(hero, tabs);
 
-  if (state.view === 'history') {
+  if (state.view === 'history' || state.view === 'archives') {
     const content = document.createElement('section');
     content.className = 'content';
 
     if (filteredItems.length === 0) {
-      content.append(createEmptyState());
+      if (state.view === 'archives') {
+        const emptyState = createEmptyState();
+        const title = emptyState.querySelector('h2');
+        const desc = emptyState.querySelector('p');
+        if (title) title.textContent = 'Belum ada arsip';
+        if (desc) desc.textContent = 'Anime yang Anda arsipkan akan muncul di sini.';
+        content.append(emptyState);
+      } else {
+        content.append(createEmptyState());
+      }
     } else {
       for (const item of filteredItems) {
         content.append(createWatchCard(item));
@@ -1351,7 +1374,7 @@ async function renderPopup(): Promise<void> {
     container.append(actions, importInput, filters, summary, content);
   } else if (state.view === 'channels') {
     container.append(createYouTubeChannelsSection(youtubeChannels));
-  } else {
+  } else if (state.view === 'domains') {
     container.append(createAnimeDomainsSection(animeDomains));
   }
 

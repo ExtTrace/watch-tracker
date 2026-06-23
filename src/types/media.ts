@@ -37,6 +37,7 @@ export interface MediaItem {
   nextEpisode?: string | null;
   nextEpisodeAvailableAt?: string | null;
   hasNewEpisode?: boolean;
+  isArchived?: boolean;
   lastWatchedAt: string;
 }
 
