@@ -27,7 +27,7 @@ function normalizeChannelName(value: string): string {
 }
 
 function normalizeChannelHandle(value: string): string {
-  return value.trim().toLowerCase().replace(/^@/, '').replace(/\s+/g, '');
+  return value.trim().toLowerCase().replace(/^@+/, '').replace(/\s+/g, '');
 }
 
 function matchesAllowedYouTubeChannel(

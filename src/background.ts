@@ -1,4 +1,4 @@
-import { getAnimeDomains, migrateStorage } from './utils/storage';
+import { getAnimeDomains, setAnimeDomains, migrateStorage } from './utils/storage';
 import { normalizeHostname } from './utils/id';
 
 
@@ -101,6 +101,39 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const message = error instanceof Error ? error.message : String(error);
     console.warn('[Anime Watch Tracker] custom domain injection failed', message);
   });
+});
+
+chrome.permissions.onAdded.addListener(async (permissions) => {
+  if (!permissions.origins || permissions.origins.length === 0) {
+    return;
+  }
+
+  const domains = await getAnimeDomains();
+  let updated = false;
+
+  for (const origin of permissions.origins) {
+    const match = origin.match(/^https?:\/\/(?:\*\.)?([^/]+)\/\*$/);
+    if (match) {
+      const hostname = normalizeHostname(match[1]);
+      for (const domain of domains) {
+        if (!domain.grantedOrigin && normalizeHostname(domain.hostname) === hostname) {
+          domain.grantedOrigin = origin.replace('*.', '');
+          updated = true;
+        }
+      }
+    }
+  }
+
+  if (updated) {
+    await setAnimeDomains(domains);
+    chrome.tabs.query({ url: permissions.origins }, (tabs) => {
+      for (const tab of tabs) {
+        if (tab.id && tab.url) {
+          injectCustomTrackerIfNeeded(tab.id, tab.url).catch(() => {});
+        }
+      }
+    });
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

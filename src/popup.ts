@@ -278,7 +278,7 @@ function createUploadDayBadge(day: string): HTMLElement {
 }
 
 function normalizeChannelHandle(value: string): string {
-  return `@${value.trim().replace(/^@/, '').replace(/\s+/g, '')}`;
+  return value.trim().replace(/^@+/, '').replace(/\s+/g, '');
 }
 
 function normalizeDomainInput(value: string): string {

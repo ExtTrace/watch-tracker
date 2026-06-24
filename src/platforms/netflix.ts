@@ -976,7 +976,11 @@ function isIgnoredTitleText(text: string): boolean {
     /^Netflix$/i.test(text) ||
     /^rated\s*\d+\+?$/i.test(text) ||
     /^(tv|pg|nc|ma|r)[-\s]?\d*[a-z+]*$/i.test(text) ||
-    /^skip intro$/i.test(text)
+    /^skip intro$/i.test(text) ||
+    /^play$/i.test(text) ||
+    /^watch$/i.test(text) ||
+    /^play episode$/i.test(text) ||
+    /^next episode$/i.test(text)
   );
 }
 
