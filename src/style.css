@@ -73,7 +73,29 @@ button {
   padding: 8px 4px 16px;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  position: relative;
+}
+
+.popup-settings-btn {
+  position: absolute;
+  right: 4px;
+  top: 8px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.popup-settings-btn:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .summary-panel::after,
@@ -95,8 +117,9 @@ button {
   background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-align: center;
+  text-align: left;
   letter-spacing: -0.5px;
+  padding-left: 8px;
 }
 
 .watch-card-meta,
@@ -126,7 +149,7 @@ button {
 
 .view-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.06);

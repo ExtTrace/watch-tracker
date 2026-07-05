@@ -113,64 +113,58 @@ async function checkNewEpisodes(): Promise<void> {
 
   const storage = await getMediaStorage();
   let updated = false;
+  const newlyReleased: { title: string; episode: string; link: string }[] = [];
 
   for (const item of storage.items) {
     if (item.isArchived) continue;
 
-    let hasNewEpisodeFound = false;
-    let newEpisodeTitle = '';
-    let link = item.url;
-
-    if (item.platform === 'netflix') {
-      if (item.nextEpisodeAvailableAt && Date.now() >= new Date(item.nextEpisodeAvailableAt).getTime()) {
-        const nextEpStr = item.nextEpisode ?? '';
-        if (item.lastNotifiedEpisode !== nextEpStr) {
-          hasNewEpisodeFound = true;
-          newEpisodeTitle = nextEpStr;
-          item.lastNotifiedEpisode = nextEpStr;
-        }
-      }
-    } else if (item.platform === 'custom') {
-      let shouldQuery = true;
-      if (item.nextEpisodeAvailableAt) {
-        const nextAiringMs = new Date(item.nextEpisodeAvailableAt).getTime();
-        // If the current time is still BEFORE the known next airing time, do NOT hit the API
-        if (Date.now() < nextAiringMs) {
-          shouldQuery = false;
-        }
-      }
-
-      if (shouldQuery) {
-        const anilistResult = await searchAniListAnime(item.title);
-        if (anilistResult?.nextAiringEpisode) {
-          const nextEpNum = anilistResult.nextAiringEpisode.episode;
-          const latestAiredEpNum = nextEpNum - 1;
-          const latestAiredEpStr = `Episode ${latestAiredEpNum}`;
-
-          // Save the FUTURE airing time so we don't hit the API again until this time passes
-          item.nextEpisodeAvailableAt = new Date(anilistResult.nextAiringEpisode.airingAt * 1000).toISOString();
-
-          if (latestAiredEpNum > 0 && item.lastNotifiedEpisode !== latestAiredEpStr) {
-            hasNewEpisodeFound = true;
-            newEpisodeTitle = latestAiredEpStr;
-            item.lastNotifiedEpisode = latestAiredEpStr;
-          }
-        } else {
-          // If nextAiringEpisode is null, the anime might be finished.
-          // Set to check again in 7 days to avoid spamming the API for completed series.
-          item.nextEpisodeAvailableAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        }
+    let shouldQuery = true;
+    if (item.nextEpisodeAvailableAt) {
+      const nextAiringMs = new Date(item.nextEpisodeAvailableAt).getTime();
+      // If the current time is still BEFORE the known next airing time, do NOT hit the API
+      if (Date.now() < nextAiringMs) {
+        shouldQuery = false;
       }
     }
 
-    if (hasNewEpisodeFound) {
-      updated = true;
-      const message = `🎬 <b>Episode Baru Rilis!</b>\n\n<b>${item.title}</b>\n${newEpisodeTitle}\n\n<a href="${link}">Tonton Sekarang</a>`;
-      try {
-        await sendTelegramNotification(settings.chatId, message);
-      } catch (err) {
-        console.error('Failed to notify', err);
+    if (shouldQuery) {
+      const anilistResult = await searchAniListAnime(item.title);
+      if (anilistResult?.nextAiringEpisode) {
+        const nextEpNum = anilistResult.nextAiringEpisode.episode;
+        const latestAiredEpNum = nextEpNum - 1;
+        const latestAiredEpStr = `Episode ${latestAiredEpNum}`;
+
+        // Save the FUTURE airing time so we don't hit the API again until this time passes
+        item.nextEpisodeAvailableAt = new Date(anilistResult.nextAiringEpisode.airingAt * 1000).toISOString();
+
+        if (latestAiredEpNum > 0 && item.lastNotifiedEpisode !== latestAiredEpStr) {
+          item.lastNotifiedEpisode = latestAiredEpStr;
+          updated = true;
+          newlyReleased.push({
+            title: item.title,
+            episode: latestAiredEpStr,
+            link: item.url,
+          });
+        }
+      } else {
+        // If nextAiringEpisode is null, the anime might be finished.
+        // Set to check again in 7 days to avoid spamming the API for completed series.
+        item.nextEpisodeAvailableAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        updated = true;
       }
+    }
+  }
+
+  if (newlyReleased.length > 0) {
+    let message = `🎬 <b>${newlyReleased.length} Episode Baru Rilis!</b>\n\n`;
+    for (const release of newlyReleased) {
+      message += `<b>${release.title}</b>\n${release.episode} - <a href="${release.link}">Tonton Sekarang</a>\n\n`;
+    }
+
+    try {
+      await sendTelegramNotification(settings.chatId, message.trim());
+    } catch (err) {
+      console.error('Failed to notify', err);
     }
   }
 

@@ -14,6 +14,7 @@ import {
   type ViewValue,
 } from './state';
 import { createHistoryTab } from './components/HistoryTab';
+import { ICONS } from './ui/helpers';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -47,14 +48,7 @@ function createViewTabButton(label: string, value: ViewValue): HTMLButtonElement
   button.className = `view-tab${state.view === value ? ' is-active' : ''}`;
   button.textContent = label;
   button.addEventListener('click', () => {
-    if (value === 'settings') {
-      if (chrome.runtime.openOptionsPage) {
-        chrome.runtime.openOptionsPage();
-      } else {
-        window.open(chrome.runtime.getURL('options.html'));
-      }
-      return;
-    }
+    if (value === 'settings') return; // Handled by icon now
     state.view = value;
     void renderPopup();
   });
@@ -79,12 +73,26 @@ async function renderPopup(): Promise<void> {
   hero.className = 'hero-panel';
   hero.innerHTML = '<h1 class="hero-title">Anime Watch Tracker</h1>';
 
+  const settingsBtn = document.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.className = 'popup-settings-btn';
+  settingsBtn.innerHTML = ICONS.settings;
+  settingsBtn.title = 'Open Settings';
+  settingsBtn.addEventListener('click', () => {
+    if (chrome.runtime.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+    } else {
+      window.open(chrome.runtime.getURL('options.html'));
+    }
+  });
+
+  hero.append(settingsBtn);
+
   const tabs = document.createElement('div');
   tabs.className = 'view-tabs';
   tabs.append(
     createViewTabButton('History', 'history'),
     createViewTabButton('Archives', 'archives'),
-    createViewTabButton('Settings', 'settings'),
   );
 
   container.append(hero, tabs);
