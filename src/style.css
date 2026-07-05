@@ -383,6 +383,13 @@ button {
   margin-top: 14px;
 }
 
+.telegram-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
 .channel-item {
   display: flex;
   align-items: flex-start;

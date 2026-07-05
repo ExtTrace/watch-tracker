@@ -5,26 +5,32 @@ import type {
   AnimeDomain,
   MediaItem,
   Platform,
+  TelegramSettings,
 } from './types/media';
 import {
   clearMediaStorage,
   getAnimeDomains,
   getMediaStorage,
   getYouTubeChannels,
+  getTelegramSettings,
   importMediaItems,
   removeAnimeDomain,
   removeMediaItem,
   removeYouTubeChannel,
   setAnimeDomains,
   setMediaItemArchived,
+  setTelegramSettings,
   upsertAnimeDomain,
   upsertYouTubeChannel,
   getLastFilter,
   setLastFilter,
+  getLastSettingsView,
+  setLastSettingsView,
 } from './utils/storage';
 
 type FilterValue = 'all' | Platform;
 type ViewValue = 'history' | 'archives' | 'settings';
+type SettingsViewValue = 'data' | 'telegram' | 'youtube' | 'custom';
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
 type YouTubeChannelDraft = {
   id: string | null;
@@ -57,6 +63,7 @@ const state = {
     initialViewParam === 'settings'
       ? 'settings'
       : ('history' as ViewValue),
+  settingsView: 'data' as SettingsViewValue,
   youtubeChannelModalOpen: false,
   youtubeChannelDraft: {
     id: null,
@@ -196,7 +203,9 @@ const ICONS = {
   archive: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`,
   unarchive: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="12" y1="12" x2="12" y2="16"></line><polyline points="10 14 12 12 14 14"></polyline></svg>`,
   delete: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
-  edit: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`
+  edit: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
+  eye: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
+  eyeOff: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`
 };
 
 function createIconButton(
@@ -868,11 +877,11 @@ function createYouTubeChannelsSection(
   title.className = 'channels-panel-title';
   title.textContent = 'YouTube Channels';
 
-  const subtitle = document.createElement('p');
-  subtitle.className = 'channels-panel-copy';
-  subtitle.textContent = 'Hanya video dari channel enabled yang akan disimpan.';
+  // const subtitle = document.createElement('p');
+  // subtitle.className = 'channels-panel-copy';
+  // subtitle.textContent = 'Hanya video dari channel enabled yang akan disimpan.';
 
-  titleGroup.append(title, subtitle);
+  titleGroup.append(title, /*subtitle*/);
   header.append(
     titleGroup,
     createButton('Add Channel', () => {
@@ -1031,13 +1040,11 @@ function createAnimeDomainsSection(domains: AnimeDomain[]): HTMLElement {
   title.className = 'channels-panel-title';
   title.textContent = 'Anime Domains';
 
-  const subtitle = document.createElement('p');
-  subtitle.className = 'channels-panel-copy';
-  subtitle.textContent = isStandaloneDomainsView
-    ? 'Tab ini aman untuk grant permission dan save domain anime.'
-    : 'Tambah atau edit domain lewat dialog, lalu lanjutkan grant permission.';
+  // subtitle.textContent = isStandaloneDomainsView
+  //   ? 'Tab ini aman untuk grant permission dan save domain anime.'
+  //   : 'Tambah atau edit domain lewat dialog, lalu lanjutkan grant permission.';
 
-  titleGroup.append(title, subtitle);
+  titleGroup.append(title, /*subtitle*/);
   header.append(
     titleGroup,
     createButton('Add Domain', () => {
@@ -1329,10 +1336,11 @@ function filterItems(items: MediaItem[], isAll: boolean = false): MediaItem[] {
 }
 
 async function renderPopup(): Promise<void> {
-  const [storage, youtubeChannels, animeDomains] = await Promise.all([
+  const [storage, youtubeChannels, animeDomains, telegramSettings] = await Promise.all([
     getMediaStorage(),
     getYouTubeChannels(),
     getAnimeDomains(),
+    getTelegramSettings(),
   ]);
   const items = [...storage.items].sort(
     (left, right) =>
@@ -1407,6 +1415,156 @@ async function renderPopup(): Promise<void> {
 
   const filters = document.createElement('div');
   filters.className = 'filter-row';
+
+  function createTelegramSettingsSection(settings: TelegramSettings): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'channels-panel';
+
+    const header = document.createElement('div');
+    header.className = 'channels-panel-header';
+    const title = document.createElement('h2');
+    title.className = 'channels-panel-title';
+    title.textContent = 'Telegram Notifications';
+    header.append(title);
+
+    const enabledToggle = document.createElement('label');
+    enabledToggle.className = 'domain-permission-toggle';
+    enabledToggle.style.margin = '16px 0';
+    const enabledCheckbox = document.createElement('input');
+    enabledCheckbox.type = 'checkbox';
+    enabledCheckbox.checked = settings.enabled;
+    enabledCheckbox.addEventListener('change', () => {
+      void setTelegramSettings({
+        ...settings,
+        enabled: enabledCheckbox.checked,
+      });
+    });
+    const enabledText = document.createElement('span');
+    enabledText.textContent = 'Enable New Episode Notifications';
+    enabledToggle.append(enabledCheckbox, enabledText);
+
+    const container = document.createElement('div');
+    container.className = 'telegram-settings-container';
+    container.style.borderTop = '1px solid rgba(255, 255, 255, 0.07)';
+    container.style.paddingTop = '16px';
+    container.style.marginTop = '0';
+
+    // const formDescription = document.createElement('p');
+    // formDescription.className = 'channels-panel-copy';
+    // formDescription.textContent = 'Set up your bot credentials below to receive notifications.';
+    // container.append(formDescription);
+
+    const tokenGroup = document.createElement('div');
+    tokenGroup.style.display = 'flex';
+    tokenGroup.style.flexDirection = 'column';
+    tokenGroup.style.gap = '6px';
+
+    const tokenLabel = document.createElement('label');
+    tokenLabel.className = 'domain-label';
+    tokenLabel.textContent = 'Bot Token';
+    const tokenInputWrapper = document.createElement('div');
+    tokenInputWrapper.style.position = 'relative';
+    tokenInputWrapper.style.display = 'flex';
+    tokenInputWrapper.style.alignItems = 'center';
+
+    const tokenInput = document.createElement('input');
+    tokenInput.className = 'domain-input';
+    tokenInput.type = 'password';
+    tokenInput.placeholder = 'e.g. 123456789:ABCDefghIJKlmnOPQRstuvWXYZ';
+    tokenInput.style.paddingRight = '40px';
+    tokenInput.value = settings.botToken;
+
+    const tokenToggleBtn = document.createElement('button');
+    tokenToggleBtn.type = 'button';
+    tokenToggleBtn.innerHTML = ICONS.eye;
+    tokenToggleBtn.style.position = 'absolute';
+    tokenToggleBtn.style.right = '10px';
+    tokenToggleBtn.style.background = 'transparent';
+    tokenToggleBtn.style.border = 'none';
+    tokenToggleBtn.style.color = 'var(--muted)';
+    tokenToggleBtn.style.cursor = 'pointer';
+    tokenToggleBtn.style.display = 'flex';
+    tokenToggleBtn.addEventListener('click', () => {
+      if (tokenInput.type === 'password') {
+        tokenInput.type = 'text';
+        tokenToggleBtn.innerHTML = ICONS.eyeOff;
+      } else {
+        tokenInput.type = 'password';
+        tokenToggleBtn.innerHTML = ICONS.eye;
+      }
+    });
+
+    tokenInputWrapper.append(tokenInput, tokenToggleBtn);
+    tokenGroup.append(tokenLabel, tokenInputWrapper);
+
+    const chatGroup = document.createElement('div');
+    chatGroup.style.display = 'flex';
+    chatGroup.style.flexDirection = 'column';
+    chatGroup.style.gap = '6px';
+
+    const chatLabel = document.createElement('label');
+    chatLabel.className = 'domain-label';
+    chatLabel.textContent = 'Chat ID';
+    const chatInputWrapper = document.createElement('div');
+    chatInputWrapper.style.position = 'relative';
+    chatInputWrapper.style.display = 'flex';
+    chatInputWrapper.style.alignItems = 'center';
+
+    const chatInput = document.createElement('input');
+    chatInput.className = 'domain-input';
+    chatInput.type = 'password';
+    chatInput.placeholder = 'e.g. 123456789 or @channelname';
+    chatInput.style.paddingRight = '40px';
+    chatInput.value = settings.chatId;
+
+    const chatToggleBtn = document.createElement('button');
+    chatToggleBtn.type = 'button';
+    chatToggleBtn.innerHTML = ICONS.eye;
+    chatToggleBtn.style.position = 'absolute';
+    chatToggleBtn.style.right = '10px';
+    chatToggleBtn.style.background = 'transparent';
+    chatToggleBtn.style.border = 'none';
+    chatToggleBtn.style.color = 'var(--muted)';
+    chatToggleBtn.style.cursor = 'pointer';
+    chatToggleBtn.style.display = 'flex';
+    chatToggleBtn.addEventListener('click', () => {
+      if (chatInput.type === 'password') {
+        chatInput.type = 'text';
+        chatToggleBtn.innerHTML = ICONS.eyeOff;
+      } else {
+        chatInput.type = 'password';
+        chatToggleBtn.innerHTML = ICONS.eye;
+      }
+    });
+
+    chatInputWrapper.append(chatInput, chatToggleBtn);
+    chatGroup.append(chatLabel, chatInputWrapper);
+
+    const actions = document.createElement('div');
+    actions.className = 'domain-form-actions';
+
+    const saveBtn = createButton('Save Settings', () => {
+      void setTelegramSettings({
+        enabled: enabledCheckbox.checked,
+        botToken: tokenInput.value.trim(),
+        chatId: chatInput.value.trim()
+      }).then(() => {
+        window.alert('Telegram credentials saved!');
+        void renderPopup();
+      });
+    }, 'primary');
+
+    const testBtn = createButton('Test Notification', () => {
+      chrome.runtime.sendMessage({ type: 'anime-watch-tracker:test-telegram' });
+    });
+
+    actions.append(saveBtn, testBtn);
+
+    container.append(tokenGroup, chatGroup, actions);
+    section.append(header, enabledToggle, container);
+
+    return section;
+  }
   filters.append(
     createFilterButton('All', 'all'),
     createFilterButton('Netflix', 'netflix'),
@@ -1451,9 +1609,40 @@ async function renderPopup(): Promise<void> {
 
     container.append(filters, summary, content);
   } else if (state.view === 'settings') {
-    container.append(createDataManagementSection(items, importInput), importInput);
-    container.append(createYouTubeChannelsSection(youtubeChannels));
-    container.append(createAnimeDomainsSection(animeDomains));
+    const settingsTabs = document.createElement('div');
+    settingsTabs.className = 'filter-row'; // Reuse the filter-row style for settings tabs
+    settingsTabs.style.marginBottom = '16px';
+
+    const createSettingsTab = (label: string, view: SettingsViewValue) => {
+      const btn = document.createElement('button');
+      btn.className = `filter-chip ${state.settingsView === view ? 'is-active' : ''}`;
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        state.settingsView = view;
+        void setLastSettingsView(view);
+        void renderPopup();
+      });
+      return btn;
+    };
+
+    settingsTabs.append(
+      createSettingsTab('Data', 'data'),
+      createSettingsTab('Telegram', 'telegram'),
+      createSettingsTab('YouTube', 'youtube'),
+      createSettingsTab('Custom', 'custom'),
+    );
+
+    container.append(settingsTabs);
+
+    if (state.settingsView === 'data') {
+      container.append(createDataManagementSection(items, importInput), importInput);
+    } else if (state.settingsView === 'telegram') {
+      container.append(createTelegramSettingsSection(telegramSettings));
+    } else if (state.settingsView === 'youtube') {
+      container.append(createYouTubeChannelsSection(youtubeChannels));
+    } else if (state.settingsView === 'custom') {
+      container.append(createAnimeDomainsSection(animeDomains));
+    }
   }
 
   popupRoot.append(container);
@@ -1463,7 +1652,11 @@ chrome.storage.onChanged.addListener(() => {
   void renderPopup();
 });
 
-void getLastFilter().then((filter) => {
+Promise.all([
+  getLastFilter(),
+  getLastSettingsView()
+]).then(([filter, settingsView]) => {
   state.filter = filter as FilterValue;
+  state.settingsView = settingsView as SettingsViewValue;
   void renderPopup();
 });

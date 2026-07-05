@@ -2,4 +2,6 @@ export const STORAGE_KEY = 'items';
 export const YOUTUBE_CHANNELS_KEY = 'youtubeChannels';
 export const ANIME_DOMAINS_KEY = 'animeDomains';
 export const LAST_FILTER_KEY = 'lastFilter';
+export const LAST_SETTINGS_VIEW_KEY = 'lastSettingsView';
+export const TELEGRAM_SETTINGS_KEY = 'telegramSettings';
 export const STORAGE_WARN_PREFIX = '[Anime Watch Tracker]';

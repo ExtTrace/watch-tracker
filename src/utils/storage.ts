@@ -4,6 +4,8 @@ import {
   STORAGE_KEY,
   STORAGE_WARN_PREFIX,
   YOUTUBE_CHANNELS_KEY,
+  TELEGRAM_SETTINGS_KEY,
+  LAST_SETTINGS_VIEW_KEY,
 } from '../constants/storage';
 import type {
   AllowedYouTubeChannel,
@@ -12,6 +14,7 @@ import type {
   MediaItem,
   MediaStorage,
   Platform,
+  TelegramSettings,
 } from '../types/media';
 import {
   createCustomSeriesKey,
@@ -25,6 +28,12 @@ import {
 
 export const defaultMediaStorage: MediaStorage = {
   items: [],
+};
+
+const DEFAULT_TELEGRAM_SETTINGS: TelegramSettings = {
+  botToken: '',
+  chatId: '',
+  enabled: false,
 };
 
 const DEFAULT_YOUTUBE_CHANNELS: AllowedYouTubeChannel[] = [];
@@ -648,6 +657,58 @@ export async function clearMediaStorage(): Promise<void> {
   await setMediaStorage(defaultMediaStorage);
 }
 
+export function getTelegramSettings(): Promise<TelegramSettings> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve({ ...DEFAULT_TELEGRAM_SETTINGS });
+      return;
+    }
+
+    try {
+      storageArea.get([TELEGRAM_SETTINGS_KEY], (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn(`${STORAGE_WARN_PREFIX} ${chrome.runtime.lastError.message}`);
+          resolve({ ...DEFAULT_TELEGRAM_SETTINGS });
+          return;
+        }
+
+        const settings = result[TELEGRAM_SETTINGS_KEY] as TelegramSettings | undefined;
+        resolve({
+          botToken: settings?.botToken ?? DEFAULT_TELEGRAM_SETTINGS.botToken,
+          chatId: settings?.chatId ?? DEFAULT_TELEGRAM_SETTINGS.chatId,
+          enabled: settings?.enabled ?? DEFAULT_TELEGRAM_SETTINGS.enabled,
+        });
+      });
+    } catch (error) {
+      console.warn(`${STORAGE_WARN_PREFIX} failed to get telegram settings`, error);
+      resolve({ ...DEFAULT_TELEGRAM_SETTINGS });
+    }
+  });
+}
+
+export function setTelegramSettings(settings: TelegramSettings): Promise<void> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve();
+      return;
+    }
+
+    try {
+      storageArea.set({ [TELEGRAM_SETTINGS_KEY]: settings }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn(`${STORAGE_WARN_PREFIX} ${chrome.runtime.lastError.message}`);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn(`${STORAGE_WARN_PREFIX} failed to set telegram settings`, error);
+      resolve();
+    }
+  });
+}
+
 export async function removeMediaItem(itemId: string): Promise<void> {
   const currentStorage = await getMediaStorage();
   const nextItems = currentStorage.items.filter((item) => item.id !== itemId);
@@ -700,7 +761,35 @@ export function setLastFilter(filter: string): Promise<void> {
       resolve();
       return;
     }
-    storageArea.set({ [LAST_FILTER_KEY]: filter }, () => resolve());
+    storageArea.set({ [LAST_FILTER_KEY]: filter }, () => {
+      resolve();
+    });
+  });
+}
+
+export function getLastSettingsView(): Promise<string> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve('data');
+      return;
+    }
+    storageArea.get([LAST_SETTINGS_VIEW_KEY], (result) => {
+      resolve((result[LAST_SETTINGS_VIEW_KEY] as string) || 'data');
+    });
+  });
+}
+
+export function setLastSettingsView(view: string): Promise<void> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve();
+      return;
+    }
+    storageArea.set({ [LAST_SETTINGS_VIEW_KEY]: view }, () => {
+      resolve();
+    });
   });
 }
 

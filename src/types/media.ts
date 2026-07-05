@@ -39,6 +39,13 @@ export interface MediaItem {
   hasNewEpisode?: boolean;
   isArchived?: boolean;
   lastWatchedAt: string;
+  lastNotifiedEpisode?: string | null;
+}
+
+export interface TelegramSettings {
+  botToken: string;
+  chatId: string;
+  enabled: boolean;
 }
 
 export interface MediaStorage {

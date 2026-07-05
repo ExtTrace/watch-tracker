@@ -1,0 +1,54 @@
+export interface AniListResult {
+  id: number;
+  title: {
+    romaji: string;
+    english: string | null;
+  };
+  nextAiringEpisode: {
+    airingAt: number;
+    episode: number;
+  } | null;
+}
+
+export async function searchAniListAnime(query: string): Promise<AniListResult | null> {
+  const graphqlQuery = `
+    query ($search: String) {
+      Media(search: $search, type: ANIME) {
+        id
+        title {
+          romaji
+          english
+        }
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  `;
+
+  const url = 'https://graphql.anilist.co';
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      query: graphqlQuery,
+      variables: { search: query },
+    }),
+  };
+
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = await response.json() as { data?: { Media?: AniListResult } };
+    return json?.data?.Media ?? null;
+  } catch {
+    return null;
+  }
+}

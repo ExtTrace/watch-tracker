@@ -1,5 +1,7 @@
-import { getAnimeDomains, setAnimeDomains, migrateStorage } from './utils/storage';
+import { getAnimeDomains, setAnimeDomains, getMediaStorage, setMediaStorage, getTelegramSettings, migrateStorage } from './utils/storage';
 import { normalizeHostname } from './utils/id';
+import { sendTelegramNotification } from './utils/telegram';
+import { searchAniListAnime } from './utils/anilist';
 
 
 
@@ -86,11 +88,90 @@ function runMigration(reason: string): void {
 
 chrome.runtime.onInstalled.addListener(() => {
   runMigration('onInstalled');
+  chrome.alarms.create('anime-episode-checker', { periodInMinutes: 60 });
 });
 
 chrome.runtime.onStartup.addListener(() => {
   runMigration('onStartup');
 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'anime-episode-checker') {
+    void checkNewEpisodes();
+  }
+});
+
+async function checkNewEpisodes(): Promise<void> {
+  const settings = await getTelegramSettings();
+  if (!settings.enabled || !settings.botToken || !settings.chatId) return;
+
+  const storage = await getMediaStorage();
+  let updated = false;
+
+  for (const item of storage.items) {
+    if (item.isArchived) continue;
+
+    let hasNewEpisodeFound = false;
+    let newEpisodeTitle = '';
+    let link = item.url;
+
+    if (item.platform === 'netflix') {
+      if (item.nextEpisodeAvailableAt && Date.now() >= new Date(item.nextEpisodeAvailableAt).getTime()) {
+        const nextEpStr = item.nextEpisode ?? '';
+        if (item.lastNotifiedEpisode !== nextEpStr) {
+          hasNewEpisodeFound = true;
+          newEpisodeTitle = nextEpStr;
+          item.lastNotifiedEpisode = nextEpStr;
+        }
+      }
+    } else if (item.platform === 'custom') {
+      let shouldQuery = true;
+      if (item.nextEpisodeAvailableAt) {
+        const nextAiringMs = new Date(item.nextEpisodeAvailableAt).getTime();
+        // If the current time is still BEFORE the known next airing time, do NOT hit the API
+        if (Date.now() < nextAiringMs) {
+          shouldQuery = false;
+        }
+      }
+
+      if (shouldQuery) {
+        const anilistResult = await searchAniListAnime(item.title);
+        if (anilistResult?.nextAiringEpisode) {
+          const nextEpNum = anilistResult.nextAiringEpisode.episode;
+          const latestAiredEpNum = nextEpNum - 1;
+          const latestAiredEpStr = `Episode ${latestAiredEpNum}`;
+
+          // Save the FUTURE airing time so we don't hit the API again until this time passes
+          item.nextEpisodeAvailableAt = new Date(anilistResult.nextAiringEpisode.airingAt * 1000).toISOString();
+
+          if (latestAiredEpNum > 0 && item.lastNotifiedEpisode !== latestAiredEpStr) {
+            hasNewEpisodeFound = true;
+            newEpisodeTitle = latestAiredEpStr;
+            item.lastNotifiedEpisode = latestAiredEpStr;
+          }
+        } else {
+          // If nextAiringEpisode is null, the anime might be finished.
+          // Set to check again in 7 days to avoid spamming the API for completed series.
+          item.nextEpisodeAvailableAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        }
+      }
+    }
+
+    if (hasNewEpisodeFound) {
+      updated = true;
+      const message = `🎬 <b>Episode Baru Rilis!</b>\n\n<b>${item.title}</b>\n${newEpisodeTitle}\n\n<a href="${link}">Tonton Sekarang</a>`;
+      try {
+        await sendTelegramNotification(settings.botToken, settings.chatId, message);
+      } catch (err) {
+        console.error('Failed to notify', err);
+      }
+    }
+  }
+
+  if (updated) {
+    await setMediaStorage(storage);
+  }
+}
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete' || !tab.url) {
@@ -137,6 +218,18 @@ chrome.permissions.onAdded.addListener(async (permissions) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'anime-watch-tracker:test-telegram') {
+    getTelegramSettings().then((settings) => {
+      if (!settings.botToken || !settings.chatId) {
+        console.warn('Bot token or Chat ID is missing');
+        return;
+      }
+      sendTelegramNotification(settings.botToken, settings.chatId, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan berhasil!').catch(console.error);
+    }).catch(console.error);
+    sendResponse({ status: 'ok' });
+    return;
+  }
+
   if (message?.type !== 'anime-watch-tracker:refresh-custom-injection') {
     return;
   }
