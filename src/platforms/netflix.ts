@@ -2,6 +2,8 @@ import type { MediaItem } from '../types/media';
 import { cleanText, getStructuredDataEntries } from '../utils/dom';
 import { createNetflixItemId } from '../utils/id';
 import { NETFLIX_URL } from '../config/env';
+import { buildNetflixOpenUrl, extractNetflixTitleId as parseNetflixTitleId } from '../utils/storage';
+import { normalizeIsoDateString } from '../utils/date';
 
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
 
@@ -44,60 +46,11 @@ let lastLoggedTitleSource = '';
 
 
 
-function extractNumericId(value: string | null | undefined): string | null {
-  const text = cleanText(value);
-  if (!text) {
-    return null;
-  }
-
-  const directMatch = text.match(/\b(\d{6,})\b/);
-  return directMatch?.[1] ?? null;
-}
-
-function extractTitleIdFromNetflixUrl(urlValue: string | null | undefined): string | null {
-  if (!urlValue) {
-    return null;
-  }
-
-  try {
-    const parsedUrl = new URL(urlValue, window.location.origin);
-
-    const pathnameTitleMatch = parsedUrl.pathname.match(/\/title\/(\d{6,})/i);
-    if (pathnameTitleMatch) {
-      return pathnameTitleMatch[1];
-    }
-
-    const queryCandidates = [
-      parsedUrl.searchParams.get('titleId'),
-      parsedUrl.searchParams.get('movieid'),
-      parsedUrl.searchParams.get('jbv'),
-      parsedUrl.searchParams.get('tctx'),
-    ];
-
-    for (const candidate of queryCandidates) {
-      const extracted = extractNumericId(candidate);
-      if (extracted) {
-        return extracted;
-      }
-    }
-
-    const decodedUrl = decodeURIComponent(parsedUrl.toString());
-    const nestedTitleMatch = decodedUrl.match(/\/title\/(\d{6,})/i);
-    if (nestedTitleMatch) {
-      return nestedTitleMatch[1];
-    }
-  } catch {
-    return extractNumericId(urlValue);
-  }
-
-  return null;
-}
-
 function extractTitleIdFromPageLinks(): string | null {
   const links = document.querySelectorAll<HTMLAnchorElement>('a[href*="/title/"]');
 
   for (const link of links) {
-    const titleId = extractTitleIdFromNetflixUrl(link.href);
+    const titleId = parseNetflixTitleId(link.href);
     if (titleId) {
       return titleId;
     }
@@ -114,7 +67,7 @@ function extractTitleIdFromMeta(): string | null {
   ];
 
   for (const candidate of metaCandidates) {
-    const titleId = extractTitleIdFromNetflixUrl(candidate);
+    const titleId = parseNetflixTitleId(candidate);
     if (titleId) {
       return titleId;
     }
@@ -134,7 +87,7 @@ function extractTitleIdFromStructuredData(): string | null {
           ? ((entry.partOfSeries as Record<string, unknown>).url as string)
           : null;
 
-    const titleId = extractTitleIdFromNetflixUrl(urlCandidate);
+    const titleId = parseNetflixTitleId(urlCandidate);
     if (titleId) {
       return titleId;
     }
@@ -143,37 +96,15 @@ function extractTitleIdFromStructuredData(): string | null {
   return null;
 }
 
-function extractNetflixTitleId(): string | null {
+function scrapeNetflixTitleId(): string | null {
   const currentUrl = window.location.href;
   const titleId =
-    extractTitleIdFromNetflixUrl(currentUrl) ??
+    parseNetflixTitleId(currentUrl) ??
     extractTitleIdFromPageLinks() ??
     extractTitleIdFromMeta() ??
     extractTitleIdFromStructuredData();
 
   return titleId;
-}
-
-function buildNetflixOpenUrl(title: string, titleId: string | null): string {
-  if (titleId) {
-    return `${NETFLIX_URL}/title/${titleId}`;
-  }
-
-  return `${NETFLIX_URL}/search?q=${encodeURIComponent(title)}`;
-}
-
-function normalizeIsoDateString(value: string | null | undefined): string | null {
-  const text = cleanText(value);
-  if (!text) {
-    return null;
-  }
-
-  const timestamp = Date.parse(text);
-  if (!Number.isNaN(timestamp)) {
-    return new Date(timestamp).toISOString();
-  }
-
-  return null;
 }
 
 function normalizeMonthDayDateString(value: string | null | undefined): string | null {
@@ -889,8 +820,8 @@ export async function lookupNetflixPublishedAt(
   item: Pick<MediaItem, 'url' | 'watchUrl' | 'episode' | 'episodeTitle'>,
 ): Promise<string | null> {
   const titleId =
-    extractTitleIdFromNetflixUrl(item.url) ??
-    extractTitleIdFromNetflixUrl(item.watchUrl);
+    parseNetflixTitleId(item.url) ??
+    parseNetflixTitleId(item.watchUrl);
 
   if (!titleId) {
     return null;
@@ -923,8 +854,8 @@ export async function lookupNetflixEpisodeState(
   item: Pick<MediaItem, 'url' | 'watchUrl' | 'episode' | 'episodeTitle'>,
 ): Promise<NetflixEpisodeState> {
   const titleId =
-    extractTitleIdFromNetflixUrl(item.url) ??
-    extractTitleIdFromNetflixUrl(item.watchUrl);
+    parseNetflixTitleId(item.url) ??
+    parseNetflixTitleId(item.watchUrl);
 
   if (!titleId) {
     return {
@@ -1546,7 +1477,7 @@ export function extractNetflixWatchData(): MediaItem | null {
     season,
     episode,
     episodeTitle,
-    url: buildNetflixOpenUrl(title, extractNetflixTitleId()),
+    url: buildNetflixOpenUrl(title, scrapeNetflixTitleId()),
     watchUrl: window.location.href,
     publishedAt: episodeState.publishedAt ?? extractNetflixPublishedAt(episodeTitle, episode),
     nextEpisode: episodeState.nextEpisode,

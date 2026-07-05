@@ -1,3 +1,5 @@
+import { cleanText } from "./dom";
+
 export function formatDurationFromSeconds(totalSeconds: number): string | null {
   if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
     return null;
@@ -19,4 +21,20 @@ export function formatDurationFromSeconds(totalSeconds: number): string | null {
   return [minutes, seconds]
     .map((value) => String(value).padStart(2, '0'))
     .join(':');
+}
+
+export function normalizeIsoDateString(
+  value: string | null | undefined,
+): string | null {
+  const text = cleanText(value);
+  if (!text) {
+    return null;
+  }
+
+  const timestamp = Date.parse(text);
+  if (!Number.isNaN(timestamp)) {
+    return new Date(timestamp).toISOString();
+  }
+
+  return null;
 }

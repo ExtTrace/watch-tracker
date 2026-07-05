@@ -10,7 +10,9 @@ import {
   getMediaStorage,
   clearMediaStorage,
   importMediaItems,
+  normalizeChannelHandle
 } from './utils/storage';
+import { normalizeCurrentDomainInput } from './utils/formatters';
 import { createAnimeDomainsSection } from './components/settings/CustomDomainSettings';
 import { createYouTubeChannelsSection } from './components/settings/YouTubeSettings';
 import { createTelegramSettingsSection } from './components/settings/TelegramSettings';
@@ -30,25 +32,12 @@ const state = {
   youtubeChannelModalOpen: false,
 };
 
-function normalizeChannelHandle(value: string): string {
-  return value.trim().replace(/^@+/, '').replace(/\s+/g, '');
-}
-
 function normalizeDomainInput(value: string): string {
   return value
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
-    .replace(/\/.*$/, '')
-    .replace(/\/$/, '');
-}
-
-function normalizeCurrentDomainInput(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
     .replace(/\/.*$/, '')
     .replace(/\/$/, '');
 }
@@ -185,11 +174,11 @@ async function renderOptions(): Promise<void> {
 
   const sidebar = document.createElement('aside');
   sidebar.className = 'options-sidebar';
-  
+
   const sidebarTitle = document.createElement('h1');
   sidebarTitle.className = 'options-sidebar-title';
   sidebarTitle.textContent = 'Settings';
-  
+
   const sidebarMenu = document.createElement('div');
   sidebarMenu.className = 'options-sidebar-menu';
   sidebarMenu.append(
@@ -203,10 +192,10 @@ async function renderOptions(): Promise<void> {
 
   const content = document.createElement('main');
   content.className = 'options-content';
-  
+
   const contentTitle = document.createElement('h2');
   contentTitle.className = 'options-content-title';
-  
+
   layout.append(sidebar, content);
 
   if (state.settingsView === 'youtube') {
@@ -311,24 +300,24 @@ async function renderOptions(): Promise<void> {
         },
         onSaveDomain: async () => {
           const { baseDomain, nextDraft } = buildAnimeDomainBase(animeDomains);
-          
+
           if (!state.animeDomainRequestPermission && baseDomain.grantedOrigin) {
-             const nextDomains = mergeAnimeDomains(animeDomains, baseDomain);
-             await setAnimeDomains(nextDomains);
-             state.animeDomainModalOpen = false;
-             state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
-             await renderOptions();
-             return;
+            const nextDomains = mergeAnimeDomains(animeDomains, baseDomain);
+            await setAnimeDomains(nextDomains);
+            state.animeDomainModalOpen = false;
+            state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
+            await renderOptions();
+            return;
           }
-          
+
           const grantedOrigin = await requestAnimeDomainPermission(nextDraft.currentDomain);
           const finalDomain: AnimeDomain = { ...baseDomain, grantedOrigin };
           const nextDomains = mergeAnimeDomains(animeDomains, finalDomain);
-          
+
           await setAnimeDomains(nextDomains);
-          
+
           if (chrome.runtime?.sendMessage) {
-            chrome.runtime.sendMessage({ type: 'anime-watch-tracker:refresh-custom-injection' }).catch(() => {});
+            chrome.runtime.sendMessage({ type: 'anime-watch-tracker:refresh-custom-injection' }).catch(() => { });
           }
 
           state.animeDomainModalOpen = false;
@@ -381,7 +370,7 @@ async function renderOptions(): Promise<void> {
     header.className = 'options-content-header';
     contentTitle.textContent = 'Data Management';
     header.append(contentTitle);
-    
+
     const importInput = document.createElement('input');
     importInput.type = 'file';
     importInput.accept = 'application/json,.json';
@@ -399,7 +388,7 @@ async function renderOptions(): Promise<void> {
 
     const dataSectionGrid = document.createElement('div');
     dataSectionGrid.className = 'channel-grid';
-    
+
     const dataSection = createDataManagementSection({
       onImportClick: () => importInput.click(),
       onExportClick: () => downloadJsonFile(storage.items),

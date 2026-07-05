@@ -7,10 +7,9 @@ import {
 } from './platforms/netflix';
 import { extractYouTubeWatchData, isYouTubeWatchPage } from './platforms/youtube';
 import { debounce } from './utils/debounce';
-import { createCustomSeriesKey, createYouTubeSeriesKey } from './utils/id';
+import { upsertMediaItem } from './utils/storage';
 
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
-const STORAGE_KEY = 'items';
 const SAVE_DEBOUNCE_MS = 1200;
 const MIN_SAVE_INTERVAL_MS = 45000;
 const INTERACTION_SAVE_INTERVAL_MS = 1500;
@@ -98,112 +97,8 @@ function isExtensionContextValid(): boolean {
   }
 }
 
-function getStorageArea(): chrome.storage.StorageArea | null {
-  if (!isExtensionContextValid()) {
-    return null;
-  }
 
-  try {
-    return chrome.storage.local;
-  } catch (error) {
-    deactivateContentScript(error);
-    return null;
-  }
-}
 
-function getStoredItems(): Promise<MediaItem[]> {
-  return new Promise((resolve) => {
-    const storageArea = getStorageArea();
-    if (!storageArea) {
-      resolve([]);
-      return;
-    }
-
-    try {
-      storageArea.get([STORAGE_KEY], (result) => {
-        if (chrome.runtime.lastError) {
-          deactivateContentScript(chrome.runtime.lastError);
-          resolve([]);
-          return;
-        }
-
-        const items = Array.isArray(result[STORAGE_KEY]) ? (result[STORAGE_KEY] as MediaItem[]) : [];
-        resolve(items);
-      });
-    } catch (error) {
-      deactivateContentScript(error);
-      resolve([]);
-    }
-  });
-}
-
-function setStoredItems(items: MediaItem[]): Promise<void> {
-  return new Promise((resolve) => {
-    const storageArea = getStorageArea();
-    if (!storageArea) {
-      resolve();
-      return;
-    }
-
-    try {
-      storageArea.set({ [STORAGE_KEY]: items }, () => {
-        if (chrome.runtime.lastError) {
-          deactivateContentScript(chrome.runtime.lastError);
-        }
-
-        resolve();
-      });
-    } catch (error) {
-      deactivateContentScript(error);
-      resolve();
-    }
-  });
-}
-
-async function upsertMediaItem(item: MediaItem): Promise<void> {
-  const items = (await getStoredItems()).filter((existingItem) => {
-    if (existingItem.id === item.id) {
-      return false;
-    }
-
-    if (
-      item.platform === 'youtube' &&
-      (item.seriesKey ?? createYouTubeSeriesKey(item.title)) &&
-      existingItem.platform === 'youtube'
-    ) {
-      const currentSeriesKey = item.seriesKey ?? createYouTubeSeriesKey(item.title);
-      const existingSeriesKey =
-        existingItem.seriesKey ?? createYouTubeSeriesKey(existingItem.title);
-
-      if (existingSeriesKey === currentSeriesKey) {
-        return false;
-      }
-    }
-
-    if (
-      item.platform === 'custom' &&
-      (item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title)) &&
-      existingItem.platform === 'custom'
-    ) {
-      const currentSeriesKey =
-        item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title);
-      const existingSeriesKey =
-        existingItem.seriesKey ??
-        createCustomSeriesKey(existingItem.hostname ?? '', existingItem.title);
-
-      if (existingSeriesKey === currentSeriesKey) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-  items.push(item);
-  items.sort(
-    (left, right) => Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
-  );
-  await setStoredItems(items);
-}
 
 function isSupportedWatchPage(url: URL = new URL(window.location.href)): boolean {
   return isNetflixWatchPage(url) || isYouTubeWatchPage(url) || isCustomInjectedPage(url);

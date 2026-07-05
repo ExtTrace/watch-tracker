@@ -1,18 +1,21 @@
 import type { AllowedYouTubeChannel, MediaItem } from '../types/media';
-import { formatDurationFromSeconds } from '../utils/date';
+import { formatDurationFromSeconds, normalizeIsoDateString } from '../utils/date';
 import { getFirstText, getMetaContent, cleanText, getStructuredDataEntries } from '../utils/dom';
 import {
-  normalizeTitle,
   createYouTubeItemId,
   createYouTubeSeriesKey,
   parseYouTubeTitleParts,
 } from '../utils/id';
-import { YOUTUBE_CHANNELS_KEY } from '../constants/storage';
 import { YOUTUBE_URL, YOUTUBE_IMG_URL } from '../config/env';
+import {
+  normalizeChannelHandle,
+  normalizeChannelName,
+  getYouTubeChannels,
+} from '../utils/storage';
 
 const TITLE_SELECTORS = ['h1.ytd-watch-metadata', 'h1.title'];
 const CHANNEL_SELECTORS = ['ytd-channel-name a', '#channel-name a'];
-const DEFAULT_YOUTUBE_CHANNELS: AllowedYouTubeChannel[] = [];
+
 
 export function isYouTubeWatchPage(
   url: URL = new URL(window.location.href),
@@ -21,14 +24,6 @@ export function isYouTubeWatchPage(
     url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com';
 
   return isSupportedHost && url.pathname === '/watch';
-}
-
-function normalizeChannelName(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function normalizeChannelHandle(value: string): string {
-  return value.trim().toLowerCase().replace(/^@+/, '').replace(/\s+/g, '');
 }
 
 function matchesAllowedYouTubeChannel(
@@ -58,98 +53,7 @@ function matchesAllowedYouTubeChannel(
   });
 }
 
-function getStorageArea(): chrome.storage.StorageArea | null {
-  if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-    return null;
-  }
 
-  return chrome.storage.local;
-}
-
-function normalizeAllowedYouTubeChannel(
-  value: unknown,
-): AllowedYouTubeChannel | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<AllowedYouTubeChannel>;
-  const name =
-    typeof candidate.name === 'string'
-      ? candidate.name.trim().replace(/\s+/g, ' ')
-      : '';
-  if (!name) {
-    return null;
-  }
-
-  const handle =
-    typeof candidate.handle === 'string' && candidate.handle.trim().length > 0
-      ? `@${normalizeChannelHandle(candidate.handle)}`
-      : null;
-
-  return {
-    id:
-      typeof candidate.id === 'string' && candidate.id.trim().length > 0
-        ? candidate.id.trim()
-        : `youtube-channel-${handle ? normalizeChannelHandle(handle) : normalizeTitle(name)}`,
-    name,
-    handle,
-    enabled: candidate.enabled !== false,
-    createdAt:
-      typeof candidate.createdAt === 'string' &&
-        candidate.createdAt.trim().length > 0
-        ? candidate.createdAt
-        : new Date().toISOString(),
-  };
-}
-
-function normalizeAllowedYouTubeChannels(
-  items: unknown[],
-): AllowedYouTubeChannel[] {
-  const byKey = new Map<string, AllowedYouTubeChannel>();
-
-  for (const item of items) {
-    const normalized = normalizeAllowedYouTubeChannel(item);
-    if (!normalized) {
-      continue;
-    }
-
-    const key = normalized.handle
-      ? `handle:${normalizeChannelHandle(normalized.handle)}`
-      : `name:${normalizeChannelName(normalized.name)}`;
-    byKey.set(key, normalized);
-  }
-
-  return [...byKey.values()].sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
-}
-
-function getYouTubeChannels(): Promise<AllowedYouTubeChannel[]> {
-  return new Promise((resolve) => {
-    const storageArea = getStorageArea();
-    if (!storageArea) {
-      resolve(DEFAULT_YOUTUBE_CHANNELS.map((channel) => ({ ...channel })));
-      return;
-    }
-
-    storageArea.get([YOUTUBE_CHANNELS_KEY], (result) => {
-      const rawChannels = Array.isArray(result[YOUTUBE_CHANNELS_KEY])
-        ? result[YOUTUBE_CHANNELS_KEY]
-        : DEFAULT_YOUTUBE_CHANNELS;
-      const normalizedChannels = normalizeAllowedYouTubeChannels(rawChannels);
-
-      if (!Array.isArray(result[YOUTUBE_CHANNELS_KEY])) {
-        storageArea.set({ [YOUTUBE_CHANNELS_KEY]: normalizedChannels }, () =>
-          resolve(normalizedChannels),
-        );
-        return;
-      }
-
-      resolve(normalizedChannels);
-    });
-  });
-}
 
 function getYouTubeVideoId(
   url: URL = new URL(window.location.href),
@@ -212,22 +116,6 @@ function extractYouTubeDuration(): string | null {
   }
 
   return formatDurationFromSeconds(video.duration);
-}
-
-function normalizeIsoDateString(
-  value: string | null | undefined,
-): string | null {
-  const text = cleanText(value);
-  if (!text) {
-    return null;
-  }
-
-  const timestamp = Date.parse(text);
-  if (!Number.isNaN(timestamp)) {
-    return new Date(timestamp).toISOString();
-  }
-
-  return null;
 }
 
 function extractPublishedAtFromPlayerResponse(

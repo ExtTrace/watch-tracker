@@ -40,7 +40,7 @@ const DEFAULT_YOUTUBE_CHANNELS: AllowedYouTubeChannel[] = [];
 
 const DEFAULT_ANIME_DOMAINS: AnimeDomain[] = [];
 
-function extractNetflixTitleId(value: string | null | undefined): string | null {
+export function extractNetflixTitleId(value: string | null | undefined): string | null {
   if (!value) {
     return null;
   }
@@ -79,7 +79,7 @@ function extractNetflixTitleId(value: string | null | undefined): string | null 
   return null;
 }
 
-function buildNetflixOpenUrl(title: string, titleId: string | null): string {
+export function buildNetflixOpenUrl(title: string, titleId: string | null): string {
   if (titleId) {
     return `${NETFLIX_URL}/title/${titleId}`;
   }
@@ -87,11 +87,11 @@ function buildNetflixOpenUrl(title: string, titleId: string | null): string {
   return `${NETFLIX_URL}/search?q=${encodeURIComponent(title)}`;
 }
 
-function normalizeChannelName(value: string): string {
+export function normalizeChannelName(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function normalizeChannelHandle(value: string): string {
+export function normalizeChannelHandle(value: string): string {
   return value.trim().toLowerCase().replace(/^@+/, '').replace(/\s+/g, '');
 }
 
@@ -122,7 +122,7 @@ function logStorageAvailability(reason: string): void {
   });
 }
 
-function getStorageArea(): chrome.storage.StorageArea | null {
+export function getStorageArea(): chrome.storage.StorageArea | null {
   if (typeof chrome === 'undefined' || !chrome.storage?.local) {
     return null;
   }
@@ -150,7 +150,7 @@ function toNullableBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function normalizeAllowedYouTubeChannel(
+export function normalizeAllowedYouTubeChannel(
   value: unknown,
 ): AllowedYouTubeChannel | null {
   if (!value || typeof value !== 'object') {
@@ -186,61 +186,93 @@ function normalizeAllowedYouTubeChannel(
 }
 
 
-function deduplicateAndSortList<T extends { name: string; enabled: boolean; createdAt: string }>(
+function deduplicateList<T>(
   items: T[],
-  getKey: (item: T) => string
+  getKey: (item: T) => string,
+  merge: (existing: T, current: T) => T
 ): T[] {
   const byKey = new Map<string, T>();
 
-  for (const normalized of items) {
-    const key = getKey(normalized);
+  for (const item of items) {
+    const key = getKey(item);
     const existing = byKey.get(key);
 
     if (!existing) {
-      byKey.set(key, normalized);
+      byKey.set(key, item);
       continue;
     }
 
-    byKey.set(key, {
-      ...existing,
-      ...normalized,
-      enabled: normalized.enabled,
-    });
+    byKey.set(key, merge(existing, item));
   }
 
-  return [...byKey.values()].sort((left, right) => {
-    const createdAtDiff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
-    if (!Number.isNaN(createdAtDiff) && createdAtDiff !== 0) {
-      return createdAtDiff;
-    }
-
-    return left.name.localeCompare(right.name);
-  });
+  return [...byKey.values()];
 }
 
-function normalizeAllowedYouTubeChannels(items: unknown[]): AllowedYouTubeChannel[] {
+export function normalizeAllowedYouTubeChannels(items: unknown[]): AllowedYouTubeChannel[] {
   const normalizedItems = items
     .map(normalizeAllowedYouTubeChannel)
     .filter((item): item is AllowedYouTubeChannel => item !== null);
 
-  return deduplicateAndSortList(normalizedItems, (normalized) =>
-    normalized.handle
-      ? `handle:${normalizeChannelHandle(normalized.handle)}`
-      : `name:${normalizeChannelName(normalized.name)}`
+  const deduplicated = deduplicateList(
+    normalizedItems,
+    (normalized) =>
+      normalized.handle
+        ? `handle:${normalizeChannelHandle(normalized.handle)}`
+        : `name:${normalizeChannelName(normalized.name)}`,
+    (existing, normalized) => ({
+      ...existing,
+      ...normalized,
+      enabled: normalized.enabled,
+    })
   );
+
+  return deduplicated.sort((left, right) => {
+    const createdAtDiff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+    if (!Number.isNaN(createdAtDiff) && createdAtDiff !== 0) {
+      return createdAtDiff;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
-function normalizeAnimeDomain(value: unknown): AnimeDomain | null {
+export function getAnimeDomainCandidate(
+  value: unknown,
+): { name: string; hostname: string; candidate: Partial<AnimeDomain> } | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
   const candidate = value as Partial<AnimeDomain>;
-  const name = typeof candidate.name === 'string' ? candidate.name.trim().replace(/\s+/g, ' ') : '';
-  const hostname = typeof candidate.hostname === 'string' ? normalizeHostname(candidate.hostname) : '';
+
+  const name =
+    typeof candidate.name === 'string'
+      ? candidate.name.trim().replace(/\s+/g, ' ')
+      : '';
+
+  const hostname =
+    typeof candidate.hostname === 'string'
+      ? normalizeHostname(candidate.hostname)
+      : '';
+
   if (!name || !hostname) {
     return null;
   }
+
+  return {
+    candidate,
+    name,
+    hostname,
+  };
+}
+
+export function normalizeAnimeDomain(value: unknown): AnimeDomain | null {
+  const result = getAnimeDomainCandidate(value);
+
+  if (!result) {
+    return null;
+  }
+
+  const { candidate, name, hostname } = result;
 
   const rawGrantedOrigin = toNullableString(candidate.grantedOrigin);
   const grantedOrigin =
@@ -269,9 +301,23 @@ function normalizeAnimeDomains(items: unknown[]): AnimeDomain[] {
     .map(normalizeAnimeDomain)
     .filter((item): item is AnimeDomain => item !== null);
 
-  return deduplicateAndSortList(normalizedItems, (normalized) =>
-    normalizeHostname(normalized.hostname)
+  const deduplicated = deduplicateList(
+    normalizedItems,
+    (normalized) => normalizeHostname(normalized.hostname),
+    (existing, normalized) => ({
+      ...existing,
+      ...normalized,
+      enabled: normalized.enabled,
+    })
   );
+
+  return deduplicated.sort((left, right) => {
+    const createdAtDiff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+    if (!Number.isNaN(createdAtDiff) && createdAtDiff !== 0) {
+      return createdAtDiff;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function normalizeMediaItem(value: unknown): MediaItem | null {
@@ -472,20 +518,32 @@ export async function upsertMediaItem(item: MediaItem): Promise<void> {
 
     if (
       item.platform === 'youtube' &&
-      item.seriesKey &&
-      existingItem.platform === 'youtube' &&
-      existingItem.seriesKey === item.seriesKey
+      (item.seriesKey ?? createYouTubeSeriesKey(item.title)) &&
+      existingItem.platform === 'youtube'
     ) {
-      return false;
+      const currentSeriesKey = item.seriesKey ?? createYouTubeSeriesKey(item.title);
+      const existingSeriesKey =
+        existingItem.seriesKey ?? createYouTubeSeriesKey(existingItem.title);
+
+      if (existingSeriesKey === currentSeriesKey) {
+        return false;
+      }
     }
 
     if (
       item.platform === 'custom' &&
-      item.seriesKey &&
-      existingItem.platform === 'custom' &&
-      existingItem.seriesKey === item.seriesKey
+      (item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title)) &&
+      existingItem.platform === 'custom'
     ) {
-      return false;
+      const currentSeriesKey =
+        item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title);
+      const existingSeriesKey =
+        existingItem.seriesKey ??
+        createCustomSeriesKey(existingItem.hostname ?? '', existingItem.title);
+
+      if (existingSeriesKey === currentSeriesKey) {
+        return false;
+      }
     }
 
     return true;
