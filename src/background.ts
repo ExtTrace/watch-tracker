@@ -49,9 +49,15 @@ async function injectCustomTrackerIfNeeded(
     return;
   }
 
-  const derivedWildcardOrigin = createWildcardOriginFromExact(matchedDomain.grantedOrigin);
+  // Ensure the grantedOrigin is a valid match pattern (migration from old bug)
+  let validGrantedOrigin = matchedDomain.grantedOrigin;
+  if (!validGrantedOrigin.includes('://')) {
+    validGrantedOrigin = `https://${validGrantedOrigin}/*`;
+  }
+
+  const derivedWildcardOrigin = createWildcardOriginFromExact(validGrantedOrigin);
   const hasExactPermission = await chrome.permissions.contains({
-    origins: [matchedDomain.grantedOrigin],
+    origins: [validGrantedOrigin],
   });
   const hasWildcardPermission = derivedWildcardOrigin
     ? await chrome.permissions.contains({
@@ -198,7 +204,7 @@ chrome.permissions.onAdded.addListener(async (permissions) => {
       const hostname = normalizeHostname(match[1]);
       for (const domain of domains) {
         if (!domain.grantedOrigin && normalizeHostname(domain.hostname) === hostname) {
-          domain.grantedOrigin = origin.replace('*.', '');
+          domain.grantedOrigin = origin;
           updated = true;
         }
       }

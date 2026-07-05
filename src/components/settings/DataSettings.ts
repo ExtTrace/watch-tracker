@@ -10,27 +10,63 @@ export function createDataManagementSection({
   onImportClick,
   onExportClick,
   onClearHistoryClick,
-}: DataSettingsProps): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'channels-panel';
+}: DataSettingsProps): DocumentFragment {
+  const fragment = document.createDocumentFragment();
 
-  const header = document.createElement('div');
-  header.className = 'channels-panel-header';
-  const title = document.createElement('h2');
-  title.className = 'channels-panel-title';
-  title.textContent = 'Data Management';
-  header.append(title);
+  // Backup & Restore Card
+  const backupCard = document.createElement('article');
+  backupCard.className = 'channel-item';
+  backupCard.style.display = 'flex';
+  backupCard.style.flexDirection = 'column';
+  backupCard.style.gap = '12px';
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'toolbar';
-  toolbar.style.marginTop = '12px';
-  toolbar.append(
-    createButton('Import JSON', onImportClick),
-    createButton('Export JSON', onExportClick),
-    createButton('Clear History', onClearHistoryClick, 'primary'),
+  const backupTitle = document.createElement('h3');
+  backupTitle.className = 'channel-item-name';
+  backupTitle.textContent = 'Backup & Restore';
+  
+  const backupDesc = document.createElement('p');
+  backupDesc.className = 'channel-item-meta';
+  backupDesc.textContent = 'Aman dan simpan progress tontonan Anda, atau pulihkan dari file JSON.';
+
+  const backupActions = document.createElement('div');
+  backupActions.className = 'channel-item-actions';
+  backupActions.style.justifyContent = 'flex-start';
+  backupActions.append(
+    createButton('Export JSON', onExportClick, 'primary'),
+    createButton('Import JSON', onImportClick)
   );
 
-  section.append(header, toolbar);
+  backupCard.append(backupTitle, backupDesc, backupActions);
 
-  return section;
+  // Danger Zone Card
+  const dangerCard = document.createElement('article');
+  dangerCard.className = 'channel-item';
+  dangerCard.style.display = 'flex';
+  dangerCard.style.flexDirection = 'column';
+  dangerCard.style.gap = '12px';
+
+  const dangerTitle = document.createElement('h3');
+  dangerTitle.className = 'channel-item-name';
+  dangerTitle.textContent = 'Danger Zone';
+  
+  const dangerDesc = document.createElement('p');
+  dangerDesc.className = 'channel-item-meta';
+  dangerDesc.textContent = 'Hapus seluruh progress tontonan dari ekstensi ini secara permanen.';
+
+  const dangerActions = document.createElement('div');
+  dangerActions.className = 'channel-item-actions';
+  dangerActions.style.justifyContent = 'flex-start';
+  dangerActions.append(
+    createButton('Clear History', () => {
+      if (window.confirm('Yakin ingin menghapus seluruh history secara permanen?')) {
+        onClearHistoryClick();
+      }
+    }, 'primary')
+  );
+
+  dangerCard.append(dangerTitle, dangerDesc, dangerActions);
+
+  fragment.append(backupCard, dangerCard);
+
+  return fragment;
 }

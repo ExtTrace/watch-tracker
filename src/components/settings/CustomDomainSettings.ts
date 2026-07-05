@@ -1,4 +1,4 @@
-import { createButton, createListRowBase } from '../../ui/helpers';
+import { createButton, createListRowBase, createAddCardBase } from '../../ui/helpers';
 import type { AnimeDomain } from '../../types/media';
 import { describeUnknownError, stringifyForLog, normalizeCurrentDomainInput } from '../../utils/formatters';
 import type { AnimeDomainDraft } from '../../state';
@@ -34,48 +34,25 @@ export function createAnimeDomainsSection({
   onToggleDomain,
   onDeleteDomain,
 }: CustomDomainSettingsProps): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'channels-panel';
-
-  const header = document.createElement('div');
-  header.className = 'channels-panel-header';
-
-  const titleGroup = document.createElement('div');
-  const title = document.createElement('h2');
-  title.className = 'channels-panel-title';
-  title.textContent = 'Anime Domains';
-
-  titleGroup.append(title);
-  header.append(
-    titleGroup,
-    createButton('Add Domain', () => {
-      onOpenModal();
-    }),
-  );
+  const section = document.createElement('div');
 
   const list = document.createElement('div');
-  list.className = 'channel-list';
+  list.className = 'channel-grid';
 
-  if (domains.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'channel-list-empty';
-    empty.textContent =
-      'Belum ada domain anime. Tambahkan satu domain untuk mulai tracking situs custom.';
-    list.append(empty);
-  } else {
-    for (const domain of domains) {
-      list.append(
-        createAnimeDomainRow(
-          domain,
-          () => onToggleDomain(domain),
-          () => onOpenModal(domain),
-          () => onDeleteDomain(domain.id)
-        )
-      );
-    }
+  for (const domain of domains) {
+    list.append(
+      createAnimeDomainRow(
+        domain,
+        () => onToggleDomain(domain),
+        () => onOpenModal(domain),
+        () => onDeleteDomain(domain.id)
+      )
+    );
   }
 
-  section.append(header, list);
+  list.append(createAddCardBase('Add Domain', () => onOpenModal()));
+
+  section.append(list);
 
   if (isModalOpen) {
     section.append(

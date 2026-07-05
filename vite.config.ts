@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, 'index.html'),
         popup: resolve(__dirname, 'popup.html'),
+        options: resolve(__dirname, 'options.html'),
         background: resolve(__dirname, 'src/background.ts'),
       },
       output: {

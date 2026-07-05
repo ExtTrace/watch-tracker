@@ -285,7 +285,7 @@ button {
 
 .channels-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -386,19 +386,48 @@ button {
 .telegram-settings-container {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   margin-top: 16px;
 }
 
 .channel-item {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.channel-item-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 140px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.channel-item-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.channel-item-add svg {
+  width: 32px;
+  height: 32px;
 }
 
 .channel-item-info {
@@ -407,6 +436,7 @@ button {
 
 .channel-item-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
   width: 100%;
 }
@@ -542,6 +572,90 @@ button {
   border: 0;
 }
 
+/* Options Page Layout */
+.options-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.options-sidebar {
+  width: 260px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+}
+
+.options-sidebar-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  padding: 0 24px 24px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.options-sidebar-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+}
+
+.options-sidebar-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  text-align: left;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.options-sidebar-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.options-sidebar-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.options-content {
+  flex: 1;
+  padding: 32px 48px;
+  overflow-y: auto;
+}
+
+.options-content-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.options-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+
+
 @media (max-width: 420px) {
   body {
     min-width: 360px;
@@ -563,6 +677,10 @@ button {
   .view-tab::after {
     left: 10px;
     right: 10px;
+  }
+
+  .channel-grid {
+    grid-template-columns: 1fr;
   }
 
   .channels-panel-header,
