@@ -1,12 +1,6 @@
 import './style.css';
 
-import type {
-  AllowedYouTubeChannel,
-  AnimeDomain,
-  MediaItem,
-  Platform,
-  TelegramSettings,
-} from './types/media';
+import type { AnimeDomain, MediaItem } from './types/media';
 import {
   clearMediaStorage,
   getAnimeDomains,
@@ -27,136 +21,29 @@ import {
   getLastSettingsView,
   setLastSettingsView,
 } from './utils/storage';
+import {
+  state,
+  isStandaloneDomainsView,
+  type FilterValue,
+  type ViewValue,
+  type SettingsViewValue
+} from './state';
+import { describeUnknownError } from './utils/formatters';
 
-type FilterValue = 'all' | Platform;
-type ViewValue = 'history' | 'archives' | 'settings';
-type SettingsViewValue = 'data' | 'telegram' | 'youtube' | 'custom';
+import { createHistoryTab } from './components/HistoryTab';
+import { createDataManagementSection } from './components/settings/DataSettings';
+import { createTelegramSettingsSection } from './components/settings/TelegramSettings';
+import { createYouTubeChannelsSection } from './components/settings/YouTubeSettings';
+import { createAnimeDomainsSection } from './components/settings/CustomDomainSettings';
+import { createSettingsTabNavigation } from './components/SettingsTab';
+
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
-type YouTubeChannelDraft = {
-  id: string | null;
-  createdAt?: string;
-  name: string;
-  handle: string;
-};
-type AnimeDomainDraft = {
-  id: string | null;
-  createdAt?: string;
-  name: string;
-  currentDomain: string;
-  hostname: string;
-};
 
 const app = document.querySelector<HTMLDivElement>('#app');
-const currentUrl = new URL(window.location.href);
-const initialViewParam = currentUrl.searchParams.get('view');
-const isStandaloneDomainsView =
-  currentUrl.searchParams.get('standalone') === '1';
-
 if (!app) {
   throw new Error('Popup root element #app was not found.');
 }
-
 const popupRoot = app;
-const state = {
-  filter: 'all' as FilterValue,
-  view:
-    initialViewParam === 'settings'
-      ? 'settings'
-      : ('history' as ViewValue),
-  settingsView: 'data' as SettingsViewValue,
-  youtubeChannelModalOpen: false,
-  youtubeChannelDraft: {
-    id: null,
-    name: '',
-    handle: '',
-  } as YouTubeChannelDraft,
-  animeDomainModalOpen: isStandaloneDomainsView,
-  animeDomainRequestPermission: true,
-  animeDomainDraft: {
-    id: currentUrl.searchParams.get('domainId'),
-    createdAt: currentUrl.searchParams.get('createdAt') ?? undefined,
-    name: currentUrl.searchParams.get('name') ?? '',
-    currentDomain: currentUrl.searchParams.get('currentDomain') ?? '',
-    hostname: currentUrl.searchParams.get('hostname') ?? '',
-  } as AnimeDomainDraft,
-};
-
-const dateFormatter = new Intl.DateTimeFormat('id-ID', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
-const publishedDateFormatter = new Intl.DateTimeFormat('id-ID', {
-  dateStyle: 'medium',
-});
-
-const publishedDayFormatter = new Intl.DateTimeFormat('id-ID', {
-  weekday: 'long',
-});
-
-function describeUnknownError(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message === 'string'
-  ) {
-    return error.message;
-  }
-
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-function stringifyForLog(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function formatWatchTime(value: string): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-
-  return dateFormatter.format(new Date(timestamp));
-}
-
-function formatPublishedDate(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-
-  return publishedDateFormatter.format(new Date(timestamp));
-}
-
-function formatPublishedDay(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return null;
-  }
-
-  return publishedDayFormatter.format(new Date(timestamp));
-}
 
 function openUrl(url: string): void {
   chrome.tabs.create({ url });
@@ -183,107 +70,6 @@ async function importJsonFile(file: File): Promise<void> {
   if (importedCount === 0) {
     throw new Error('No valid watch items found in the selected JSON file.');
   }
-}
-
-function createButton(
-  text: string,
-  onClick: () => void,
-  variant: 'primary' | 'secondary' = 'secondary',
-): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `button button-${variant}`;
-  button.textContent = text;
-  button.addEventListener('click', onClick);
-  return button;
-}
-
-const ICONS = {
-  play: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
-  archive: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`,
-  unarchive: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="12" y1="12" x2="12" y2="16"></line><polyline points="10 14 12 12 14 14"></polyline></svg>`,
-  delete: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
-  edit: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
-  eye: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
-  eyeOff: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`
-};
-
-function createIconButton(
-  iconSvg: string,
-  onClick: () => void,
-  variant: 'primary' | 'secondary' | 'danger' = 'secondary',
-  text?: string,
-): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `icon-button icon-button-${variant}`;
-  button.innerHTML = text ? `${iconSvg}<span>${text}</span>` : iconSvg;
-  if (!text) {
-    button.classList.add('icon-only');
-  }
-  button.addEventListener('click', onClick);
-  return button;
-}
-
-function createFilterButton(label: string, value: FilterValue): HTMLElement {
-  const isSelected = state.filter === value;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `filter-chip ${isSelected ? 'is-active' : ''}`;
-  button.textContent = label;
-
-  button.addEventListener('click', () => {
-    if (state.filter !== value) {
-      state.filter = value;
-      void setLastFilter(value);
-      void renderPopup();
-    }
-  });
-
-  return button;
-}
-
-function createViewTabButton(
-  label: string,
-  value: ViewValue,
-): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `view-tab${state.view === value ? ' is-active' : ''}`;
-  button.textContent = label;
-  button.addEventListener('click', () => {
-    state.view = value;
-    void renderPopup();
-  });
-  return button;
-}
-
-function createBadge(platform: Platform, text?: string): HTMLElement {
-  const badge = document.createElement('span');
-  badge.className = `platform-badge platform-${platform}`;
-  badge.textContent = platform === 'netflix'
-    ? 'Netflix'
-    : platform === 'youtube'
-      ? `YT: ${text}`
-      : text || 'Custom';
-  return badge;
-}
-
-// function createBadge(platform: Platform, text?: string): HTMLElement {
-//   const badge = document.createElement('span');
-//   badge.className = `platform-badge platform-${platform}`;
-//   badge.textContent =
-//     platform === 'netflix' ? 'Netflix'
-//       : platform === 'youtube' ? 'YT'
-//         : 'Custom';
-//   return badge;
-// }
-
-function createUploadDayBadge(day: string): HTMLElement {
-  const badge = document.createElement('span');
-  badge.className = 'platform-badge upload-day-badge';
-  badge.textContent = day;
-  return badge;
 }
 
 function normalizeChannelHandle(value: string): string {
@@ -313,149 +99,19 @@ function sameAnimeDomainHostname(left: string, right: string): boolean {
   return normalizeDomainInput(left) === normalizeDomainInput(right);
 }
 
-function resetYouTubeChannelDraft(): void {
-  state.youtubeChannelDraft = {
-    id: null,
-    name: '',
-    handle: '',
-  };
-}
-
-function closeYouTubeChannelModal(): void {
-  state.youtubeChannelModalOpen = false;
-}
-
-function openYouTubeChannelModal(channel?: AllowedYouTubeChannel): void {
-  if (channel) {
-    state.youtubeChannelDraft = {
-      id: channel.id,
-      createdAt: channel.createdAt,
-      name: channel.name,
-      handle: channel.handle ?? '',
-    };
-  } else {
-    resetYouTubeChannelDraft();
-  }
-
-  state.youtubeChannelModalOpen = true;
-  void renderPopup();
-}
-
-function getValidatedYouTubeChannelDraft(): YouTubeChannelDraft {
-  const name = state.youtubeChannelDraft.name.trim().replace(/\s+/g, ' ');
-  if (!name) {
-    throw new Error('Channel name is required.');
-  }
-
-  const handle = state.youtubeChannelDraft.handle.trim();
-
-  return {
-    ...state.youtubeChannelDraft,
-    name,
-    handle,
-  };
-}
-
-async function saveYouTubeChannelFromDraft(
-  channels: AllowedYouTubeChannel[],
-): Promise<void> {
-  const nextDraft = getValidatedYouTubeChannelDraft();
-  const normalizedHandle = nextDraft.handle
-    ? normalizeChannelHandle(nextDraft.handle)
-    : null;
-  const existingChannel = channels.find((channel) => {
-    if (channel.id === nextDraft.id) {
-      return true;
-    }
-
-    if (normalizedHandle && channel.handle) {
-      return normalizeChannelHandle(channel.handle) === normalizedHandle;
-    }
-
-    return channel.name.trim().toLowerCase() === nextDraft.name.toLowerCase();
-  });
-
-  await upsertYouTubeChannel({
-    id: nextDraft.id ?? existingChannel?.id ?? `youtube-channel-${Date.now()}`,
-    name: nextDraft.name,
-    handle: normalizedHandle ? `@${normalizedHandle}` : null,
-    enabled: existingChannel?.enabled ?? true,
-    createdAt: nextDraft.createdAt ?? existingChannel?.createdAt,
-  });
-
-  closeYouTubeChannelModal();
-  resetYouTubeChannelDraft();
-  await renderPopup();
-}
-
-function resetAnimeDomainDraft(): void {
-  state.animeDomainDraft = {
-    id: null,
-    name: '',
-    currentDomain: '',
-    hostname: '',
-  };
-}
-
-function closeAnimeDomainModal(): void {
-  state.animeDomainModalOpen = false;
-}
-
-function openAnimeDomainModal(domain?: AnimeDomain): void {
-  if (domain) {
-    state.animeDomainDraft = {
-      id: domain.id,
-      createdAt: domain.createdAt,
-      name: domain.name,
-      currentDomain: domain.grantedOrigin
-        ? normalizeCurrentDomainInput(domain.grantedOrigin)
-        : '',
-      hostname: domain.hostname,
-    };
-  } else if (!state.animeDomainDraft.id) {
-    resetAnimeDomainDraft();
-  }
-
-  state.animeDomainModalOpen = true;
-  void renderPopup();
-}
-
-function startAnimeDomainEdit(domain: AnimeDomain): void {
-  openAnimeDomainModal(domain);
-}
-
-function getValidatedAnimeDomainDraft(): AnimeDomainDraft {
+function getValidatedAnimeDomainDraft() {
   const name = state.animeDomainDraft.name.trim().replace(/\s+/g, ' ');
-  const currentDomain = normalizeCurrentDomainInput(
-    state.animeDomainDraft.currentDomain,
-  );
+  const currentDomain = normalizeCurrentDomainInput(state.animeDomainDraft.currentDomain);
   const hostname = normalizeDomainInput(state.animeDomainDraft.hostname);
 
-  if (!name) {
-    throw new Error('Domain name is required.');
-  }
+  if (!name) throw new Error('Domain name is required.');
+  if (!currentDomain) throw new Error('Current domain is required.');
+  if (!hostname) throw new Error('Match keyword is required.');
 
-  if (!currentDomain) {
-    throw new Error('Current domain is required.');
-  }
-
-  if (!hostname) {
-    throw new Error('Match keyword is required.');
-  }
-
-  return {
-    ...state.animeDomainDraft,
-    name,
-    currentDomain,
-    hostname,
-  };
+  return { ...state.animeDomainDraft, name, currentDomain, hostname };
 }
 
-function buildAnimeDomainBase(domains: AnimeDomain[]): {
-  nextDraft: AnimeDomainDraft;
-  existingDomain: AnimeDomain | undefined;
-  baseDomain: AnimeDomain;
-} {
+function buildAnimeDomainBase(domains: AnimeDomain[]) {
   const nextDraft = getValidatedAnimeDomainDraft();
   const existingDomain = domains.find((domain) =>
     sameAnimeDomainHostname(domain.hostname, nextDraft.hostname),
@@ -470,869 +126,139 @@ function buildAnimeDomainBase(domains: AnimeDomain[]): {
       hostname: nextDraft.hostname,
       grantedOrigin: existingDomain?.grantedOrigin ?? null,
       enabled: true,
-      createdAt:
-        nextDraft.createdAt ??
-        existingDomain?.createdAt ??
-        new Date().toISOString(),
+      createdAt: nextDraft.createdAt ?? existingDomain?.createdAt ?? new Date().toISOString(),
     },
   };
 }
 
-function mergeAnimeDomains(
-  domains: AnimeDomain[],
-  nextDomain: AnimeDomain,
-): AnimeDomain[] {
+function mergeAnimeDomains(domains: AnimeDomain[], nextDomain: AnimeDomain): AnimeDomain[] {
   const filteredDomains = domains.filter((existingDomain) => {
-    if (existingDomain.id === nextDomain.id) {
-      return false;
-    }
-
-    return !sameAnimeDomainHostname(
-      existingDomain.hostname,
-      nextDomain.hostname,
-    );
+    if (existingDomain.id === nextDomain.id) return false;
+    return !sameAnimeDomainHostname(existingDomain.hostname, nextDomain.hostname);
   });
-
   filteredDomains.push(nextDomain);
   return filteredDomains;
 }
 
-async function requestAnimeDomainPermission(
-  currentDomain: string,
-): Promise<string> {
+async function requestAnimeDomainPermission(currentDomain: string): Promise<string> {
   const normalizedCurrentDomain = normalizeCurrentDomainInput(currentDomain);
   const exactOrigin = `https://${normalizedCurrentDomain}/*`;
   const wildcardOrigin = `https://*.${normalizedCurrentDomain}/*`;
-  console.debug(`${DEBUG_PREFIX} requesting anime domain permission`, {
-    currentDomain,
-    normalizedCurrentDomain,
-    exactOrigin,
-    wildcardOrigin,
-  });
+  console.debug(`${DEBUG_PREFIX} requesting anime domain permission`, { currentDomain, normalizedCurrentDomain, exactOrigin, wildcardOrigin });
 
   const granted = await new Promise<boolean>((resolve, reject) => {
     if (!chrome.permissions?.request) {
-      reject(
-        new Error(
-          'chrome.permissions.request is unavailable in this popup context.',
-        ),
-      );
+      reject(new Error('chrome.permissions.request is unavailable in this popup context.'));
       return;
     }
-
-    chrome.permissions.request(
-      {
-        origins: [exactOrigin, wildcardOrigin],
-      },
-      (result) => {
-        if (chrome.runtime.lastError?.message) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-
-        resolve(Boolean(result));
-      },
-    );
+    chrome.permissions.request({ origins: [exactOrigin, wildcardOrigin] }, (result) => {
+      if (chrome.runtime.lastError?.message) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(Boolean(result));
+    });
   });
 
-  console.debug(`${DEBUG_PREFIX} anime domain permission result`, {
-    normalizedCurrentDomain,
-    granted,
-  });
-
+  console.debug(`${DEBUG_PREFIX} anime domain permission result`, { normalizedCurrentDomain, granted });
   if (!granted) {
     throw new Error('Permission denied. Domain was not saved.');
   }
-
   return exactOrigin;
 }
 
-async function injectTrackerIntoActiveTabIfNeeded(
-  hostnameKeyword: string,
-): Promise<void> {
-  if (!chrome.tabs?.query || !chrome.scripting?.executeScript) {
-    console.debug(
-      `${DEBUG_PREFIX} active tab injection skipped: API unavailable`,
-    );
-    return;
-  }
-
-  const [activeTab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  if (!activeTab?.id || !activeTab.url) {
-    console.debug(
-      `${DEBUG_PREFIX} active tab injection skipped: no active tab`,
-    );
-    return;
-  }
+async function injectTrackerIntoActiveTabIfNeeded(hostnameKeyword: string): Promise<void> {
+  if (!chrome.tabs?.query || !chrome.scripting?.executeScript) return;
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!activeTab?.id || !activeTab.url) return;
 
   try {
     const parsedUrl = new URL(activeTab.url);
-    if (
-      !normalizeDomainInput(parsedUrl.hostname).includes(
-        normalizeDomainInput(hostnameKeyword),
-      )
-    ) {
-      console.debug(
-        `${DEBUG_PREFIX} active tab injection skipped: hostname mismatch`,
-        {
-          activeHostname: parsedUrl.hostname,
-          hostnameKeyword,
-        },
-      );
-      return;
-    }
-
-    console.debug(`${DEBUG_PREFIX} injecting tracker into active tab`, {
-      tabId: activeTab.id,
-      url: activeTab.url,
-      hostnameKeyword,
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      files: ['content.js'],
-    });
-    console.debug(`${DEBUG_PREFIX} tracker injected into active tab`, {
-      tabId: activeTab.id,
-      url: activeTab.url,
-    });
-  } catch {
-    console.warn(
-      `${DEBUG_PREFIX} active tab injection failed ${stringifyForLog({
-        hostnameKeyword,
-      })}`,
-    );
-    return;
-  }
+    if (!normalizeDomainInput(parsedUrl.hostname).includes(normalizeDomainInput(hostnameKeyword))) return;
+    await chrome.scripting.executeScript({ target: { tabId: activeTab.id }, files: ['content.js'] });
+  } catch {}
 }
 
 async function notifyBackgroundToInjectCustomDomain(): Promise<void> {
-  if (!chrome.runtime?.sendMessage) {
-    console.debug(
-      `${DEBUG_PREFIX} background notify skipped: sendMessage unavailable`,
-    );
-    return;
-  }
-
+  if (!chrome.runtime?.sendMessage) return;
   try {
-    console.debug(
-      `${DEBUG_PREFIX} requesting background custom domain refresh`,
-    );
-    const response = await chrome.runtime.sendMessage({
-      type: 'anime-watch-tracker:refresh-custom-injection',
-    });
-    console.debug(
-      `${DEBUG_PREFIX} background custom domain refresh response`,
-      response,
-    );
-  } catch {
-    console.warn(`${DEBUG_PREFIX} background custom domain refresh failed`);
-    return;
-  }
+    await chrome.runtime.sendMessage({ type: 'anime-watch-tracker:refresh-custom-injection' });
+  } catch {}
 }
 
 async function saveAnimeDomainFromDraft(domains: AnimeDomain[]): Promise<void> {
-  const { nextDraft, existingDomain, baseDomain } =
-    buildAnimeDomainBase(domains);
-
-  console.debug(`${DEBUG_PREFIX} anime domain save submitted`, {
-    nextDraft,
-    existingDomain,
-    currentDomainCount: domains.length,
-  });
-
-  const grantedOrigin = await requestAnimeDomainPermission(
-    nextDraft.currentDomain,
-  );
-  await upsertAnimeDomain({
-    ...baseDomain,
-    grantedOrigin,
-  });
-
-  console.debug(`${DEBUG_PREFIX} anime domain saved to storage`, {
-    hostname: nextDraft.hostname,
-    grantedOrigin,
-    mode: nextDraft.id || existingDomain ? 'update-existing' : 'create-new',
-  });
-
+  const { nextDraft, existingDomain, baseDomain } = buildAnimeDomainBase(domains);
+  const grantedOrigin = await requestAnimeDomainPermission(nextDraft.currentDomain);
+  await upsertAnimeDomain({ ...baseDomain, grantedOrigin });
   await injectTrackerIntoActiveTabIfNeeded(nextDraft.hostname);
   await notifyBackgroundToInjectCustomDomain();
-  closeAnimeDomainModal();
-  resetAnimeDomainDraft();
+  state.animeDomainModalOpen = false;
+  state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
   await renderPopup();
-  window.alert(
-    nextDraft.id || existingDomain
-      ? 'Anime domain updated.'
-      : 'Anime domain saved.',
-  );
+  window.alert(nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.');
 }
 
 function saveAnimeDomainFromPopup(domains: AnimeDomain[]): void {
-  let prepared:
-    | {
-      nextDraft: AnimeDomainDraft;
-      existingDomain: AnimeDomain | undefined;
-      baseDomain: AnimeDomain;
-    }
-    | undefined;
-
+  let prepared;
   try {
     prepared = buildAnimeDomainBase(domains);
   } catch (error) {
-    const message = describeUnknownError(error);
-    window.alert(message);
+    window.alert(describeUnknownError(error));
     return;
   }
-
-  if (!prepared) {
-    return;
-  }
+  if (!prepared) return;
 
   const { nextDraft, existingDomain, baseDomain } = prepared;
   const nextDomains = mergeAnimeDomains(domains, baseDomain);
   void setAnimeDomains(nextDomains);
 
-  console.debug(
-    `${DEBUG_PREFIX} anime domain saved from popup before permission`,
-    {
-      nextDraft,
-      existingDomain,
-      requestPermissionNow: state.animeDomainRequestPermission,
-    },
-  );
-
   if (!state.animeDomainRequestPermission) {
-    closeAnimeDomainModal();
-    resetAnimeDomainDraft();
+    state.animeDomainModalOpen = false;
+    state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
     void renderPopup();
-    window.alert(
-      `${nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.'} Permission bisa diminta nanti.`,
-    );
+    window.alert(`${nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.'} Permission bisa diminta nanti.`);
     return;
   }
 
   void requestAnimeDomainPermission(nextDraft.currentDomain)
     .then(async (grantedOrigin) => {
-      await upsertAnimeDomain({
-        ...baseDomain,
-        grantedOrigin,
-      });
+      await upsertAnimeDomain({ ...baseDomain, grantedOrigin });
       await injectTrackerIntoActiveTabIfNeeded(nextDraft.hostname);
       await notifyBackgroundToInjectCustomDomain();
-      closeAnimeDomainModal();
-      resetAnimeDomainDraft();
+      state.animeDomainModalOpen = false;
+      state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
       await renderPopup();
-      window.alert(
-        nextDraft.id || existingDomain
-          ? 'Anime domain updated.'
-          : 'Anime domain saved.',
-      );
+      window.alert(nextDraft.id || existingDomain ? 'Anime domain updated.' : 'Anime domain saved.');
     })
-    .catch((error: unknown) => {
-      console.warn(
-        `${DEBUG_PREFIX} anime domain popup permission failed ${stringifyForLog(
-          {
-            draft: nextDraft,
-            errorMessage: describeUnknownError(error),
-          },
-        )}`,
-      );
-    });
+    .catch(console.warn);
 }
 
-// function createThumbnail(item: MediaItem): HTMLElement {
-//   const frame = document.createElement('div');
-//   frame.className = 'watch-thumb';
-
-//   if (item.thumbnail) {
-//     const image = document.createElement('img');
-//     image.src = item.thumbnail;
-//     image.alt = item.title;
-//     image.loading = 'lazy';
-//     frame.append(image);
-//     return frame;
-//   }
-
-//   const fallback = document.createElement('div');
-//   fallback.className = 'watch-thumb-fallback';
-//   fallback.textContent = item.platform === 'netflix' ? 'N' : 'YT';
-//   frame.append(fallback);
-//   return frame;
-// }
-
-// function buildMetadataText(item: MediaItem): string {
-//   if (item.platform === 'netflix') {
-//     if (item.episode && item.episodeTitle && item.episode === item.episodeTitle) {
-//       return item.episode;
-//     }
-//     return [item.episode, item.episodeTitle].filter(Boolean).join(' - ');
-//   }
-
-//   if (item.platform === 'custom') {
-//     return [item.episode, item.siteName].filter(Boolean).join(' - ');
-//   }
-
-//   return [item.episode, item.channel].filter(Boolean).join(' - ');
-// }
-function buildMetadataText(item: MediaItem): string {
-  if (item.episode && item.episodeTitle && item.episode === item.episodeTitle) {
-    return item.episode;
-  }
-  return [item.episode, item.episodeTitle].filter(Boolean).join(' - ');
-}
-
-function buildNetflixEpisodeStatusText(item: MediaItem): string | null {
-  if (item.platform !== 'netflix') {
-    return null;
-  }
-
-  if (item.hasNewEpisode) {
-    return item.nextEpisode
-      ? `New episode available: ${item.nextEpisode}`
-      : 'New episode available';
-  }
-
-  if (item.nextEpisode && item.nextEpisodeAvailableAt) {
-    const formattedDate = formatPublishedDate(item.nextEpisodeAvailableAt);
-    return formattedDate
-      ? `Next episode: ${item.nextEpisode} - ${formattedDate}`
-      : `Next episode: ${item.nextEpisode}`;
-  }
-
-  return null;
-}
-
-function createListRowBase(
-  nameText: string,
-  metaText: string,
-  isEnabled: boolean,
-  onToggle: () => void,
-  onEdit: () => void,
-  onDelete: () => void
-): HTMLElement {
-  const item = document.createElement('article');
-  item.className = 'channel-item';
-
-  const info = document.createElement('div');
-  info.className = 'channel-item-info';
-
-  const name = document.createElement('p');
-  name.className = 'channel-item-name';
-  name.textContent = nameText;
-
-  const meta = document.createElement('p');
-  meta.className = 'channel-item-meta';
-  meta.textContent = metaText;
-
-  info.append(name, meta);
-
-  const actions = document.createElement('div');
-  actions.className = 'channel-item-actions';
-  actions.append(
-    createButton(isEnabled ? 'Disable' : 'Enable', onToggle),
-    createIconButton(ICONS.edit, onEdit, 'secondary'),
-    createIconButton(ICONS.delete, onDelete, 'danger'),
-  );
-
-  item.append(info, actions);
-  return item;
-}
-
-function createYouTubeChannelRow(channel: AllowedYouTubeChannel): HTMLElement {
-  const metaText = [channel.handle, channel.enabled ? 'Enabled' : 'Disabled']
-    .filter(Boolean)
-    .join(' - ');
-
-  return createListRowBase(
-    channel.name,
-    metaText,
-    channel.enabled,
-    () => {
-      void upsertYouTubeChannel({
-        ...channel,
-        enabled: !channel.enabled,
-      }).then(() => renderPopup());
-    },
-    () => openYouTubeChannelModal(channel),
-    () => {
-      void removeYouTubeChannel(channel.id).then(() => renderPopup());
-    }
-  );
-}
-
-function createYouTubeChannelsSection(
-  channels: AllowedYouTubeChannel[],
-): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'channels-panel';
-
-  const header = document.createElement('div');
-  header.className = 'channels-panel-header';
-
-  const titleGroup = document.createElement('div');
-
-  const title = document.createElement('h2');
-  title.className = 'channels-panel-title';
-  title.textContent = 'YouTube Channels';
-
-  // const subtitle = document.createElement('p');
-  // subtitle.className = 'channels-panel-copy';
-  // subtitle.textContent = 'Hanya video dari channel enabled yang akan disimpan.';
-
-  titleGroup.append(title, /*subtitle*/);
-  header.append(
-    titleGroup,
-    createButton('Add Channel', () => {
-      openYouTubeChannelModal();
-    }),
-  );
-
-  const list = document.createElement('div');
-  list.className = 'channel-list';
-
-  if (channels.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'channel-list-empty';
-    empty.textContent =
-      'Belum ada channel. Tambahkan satu channel untuk mulai tracking YouTube.';
-    list.append(empty);
-  } else {
-    for (const channel of channels) {
-      list.append(createYouTubeChannelRow(channel));
-    }
-  }
-
-  section.append(header, list);
-
-  if (state.youtubeChannelModalOpen) {
-    section.append(createYouTubeChannelModal(channels));
-  }
-
-  return section;
-}
-
-function createYouTubeChannelModal(
-  channels: AllowedYouTubeChannel[],
-): HTMLElement {
-  const overlay = document.createElement('div');
-  overlay.className = 'domain-modal-overlay';
-
-  const dialog = document.createElement('section');
-  dialog.className = 'domain-modal';
-
-  const title = document.createElement('h3');
-  title.className = 'domain-form-title';
-  title.textContent = state.youtubeChannelDraft.id
-    ? 'Edit YouTube Channel'
-    : 'Add YouTube Channel';
-
-  const copy = document.createElement('p');
-  copy.className = 'channels-panel-copy';
-  copy.textContent =
-    'Hanya channel enabled yang akan dipakai untuk tracking video YouTube.';
-
-  const nameLabel = document.createElement('label');
-  nameLabel.className = 'domain-label';
-  nameLabel.textContent = 'Channel name';
-
-  const nameInput = document.createElement('input');
-  nameInput.className = 'domain-input';
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Channel name, e.g. Muse Indonesia';
-  nameInput.value = state.youtubeChannelDraft.name;
-  nameInput.addEventListener('input', () => {
-    state.youtubeChannelDraft.name = nameInput.value;
-  });
-
-  const handleLabel = document.createElement('label');
-  handleLabel.className = 'domain-label';
-  handleLabel.textContent = 'Channel handle';
-
-  const handleInput = document.createElement('input');
-  handleInput.className = 'domain-input';
-  handleInput.type = 'text';
-  handleInput.placeholder = 'Optional handle, e.g. @MuseIndonesia';
-  handleInput.value = state.youtubeChannelDraft.handle;
-  handleInput.addEventListener('input', () => {
-    state.youtubeChannelDraft.handle = handleInput.value;
-  });
-
-  const actions = document.createElement('div');
-  actions.className = 'domain-form-actions';
-  actions.append(
-    createButton(
-      'Save Channel',
-      () => {
-        void saveYouTubeChannelFromDraft(channels).catch((error: unknown) => {
-          const message =
-            describeUnknownError(error) || 'Failed to save YouTube channel.';
-          console.warn(
-            `${DEBUG_PREFIX} youtube channel save failed ${stringifyForLog({
-              draft: state.youtubeChannelDraft,
-              errorMessage: message,
-              rawError: describeUnknownError(error),
-            })}`,
-          );
-          window.alert(message);
-        });
-      },
-      'primary',
-    ),
-    createButton('Cancel', () => {
-      closeYouTubeChannelModal();
+function createFilterButton(label: string, value: FilterValue): HTMLElement {
+  const isSelected = state.filter === value;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `filter-chip ${isSelected ? 'is-active' : ''}`;
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    if (state.filter !== value) {
+      state.filter = value;
+      void setLastFilter(value);
       void renderPopup();
-    }),
-  );
-
-  dialog.append(
-    title,
-    copy,
-    nameLabel,
-    nameInput,
-    handleLabel,
-    handleInput,
-    actions,
-  );
-  overlay.append(dialog);
-  return overlay;
-}
-
-function createAnimeDomainRow(domain: AnimeDomain): HTMLElement {
-  const metaText = [
-    domain.hostname,
-    domain.grantedOrigin
-      ? normalizeCurrentDomainInput(domain.grantedOrigin)
-      : 'Permission belum diberikan',
-    domain.enabled ? 'Enabled' : 'Disabled',
-  ]
-    .filter(Boolean)
-    .join(' - ');
-
-  return createListRowBase(
-    domain.name,
-    metaText,
-    domain.enabled,
-    () => {
-      void upsertAnimeDomain({
-        ...domain,
-        enabled: !domain.enabled,
-      }).then(() => renderPopup());
-    },
-    () => startAnimeDomainEdit(domain),
-    () => {
-      void removeAnimeDomain(domain.id).then(() => renderPopup());
     }
-  );
-}
-
-function createAnimeDomainsSection(domains: AnimeDomain[]): HTMLElement {
-  const section = document.createElement('section');
-  section.className = 'channels-panel';
-
-  const header = document.createElement('div');
-  header.className = 'channels-panel-header';
-
-  const titleGroup = document.createElement('div');
-
-  const title = document.createElement('h2');
-  title.className = 'channels-panel-title';
-  title.textContent = 'Anime Domains';
-
-  // subtitle.textContent = isStandaloneDomainsView
-  //   ? 'Tab ini aman untuk grant permission dan save domain anime.'
-  //   : 'Tambah atau edit domain lewat dialog, lalu lanjutkan grant permission.';
-
-  titleGroup.append(title, /*subtitle*/);
-  header.append(
-    titleGroup,
-    createButton('Add Domain', () => {
-      resetAnimeDomainDraft();
-      openAnimeDomainModal();
-    }),
-  );
-
-  const list = document.createElement('div');
-  list.className = 'channel-list';
-
-  if (domains.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'channel-list-empty';
-    empty.textContent =
-      'Belum ada domain anime. Tambahkan satu domain untuk mulai tracking situs custom.';
-    list.append(empty);
-  } else {
-    for (const domain of domains) {
-      list.append(createAnimeDomainRow(domain));
-    }
-  }
-
-  section.append(header, list);
-
-  if (state.animeDomainModalOpen) {
-    section.append(createAnimeDomainModal(domains));
-  }
-
-  return section;
-}
-
-function createAnimeDomainModal(domains: AnimeDomain[]): HTMLElement {
-  const overlay = document.createElement('div');
-  overlay.className = 'domain-modal-overlay';
-
-  const dialog = document.createElement('section');
-  dialog.className = 'domain-modal';
-
-  const title = document.createElement('h3');
-  title.className = 'domain-form-title';
-  title.textContent = state.animeDomainDraft.id
-    ? 'Edit Anime Domain'
-    : 'Add Anime Domain';
-
-  const copy = document.createElement('p');
-  copy.className = 'channels-panel-copy';
-  copy.textContent = isStandaloneDomainsView
-    ? 'Klik Save Domain untuk meminta permission dan menyimpan domain.'
-    : 'Klik Continue in Tab agar permission request dilakukan dari tab penuh, bukan popup.';
-
-  const nameLabel = document.createElement('label');
-  nameLabel.className = 'domain-label';
-  nameLabel.textContent = 'Domain name';
-
-  const nameInput = document.createElement('input');
-  nameInput.className = 'domain-input';
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Name, e.g. Otakudesu';
-  nameInput.value = state.animeDomainDraft.name;
-  nameInput.addEventListener('input', () => {
-    state.animeDomainDraft.name = nameInput.value;
   });
-
-  const currentDomainLabel = document.createElement('label');
-  currentDomainLabel.className = 'domain-label';
-  currentDomainLabel.textContent = 'Current domain';
-
-  const currentDomainInput = document.createElement('input');
-  currentDomainInput.className = 'domain-input';
-  currentDomainInput.type = 'text';
-  currentDomainInput.placeholder = 'Current domain, e.g. otakudesu.blog';
-  currentDomainInput.value = state.animeDomainDraft.currentDomain;
-  currentDomainInput.addEventListener('input', () => {
-    state.animeDomainDraft.currentDomain = currentDomainInput.value;
-  });
-
-  const hostnameLabel = document.createElement('label');
-  hostnameLabel.className = 'domain-label';
-  hostnameLabel.textContent = 'Match keyword';
-
-  const hostnameInput = document.createElement('input');
-  hostnameInput.className = 'domain-input';
-  hostnameInput.type = 'text';
-  hostnameInput.placeholder = 'Match keyword, e.g. otakudesu';
-  hostnameInput.value = state.animeDomainDraft.hostname;
-  hostnameInput.addEventListener('input', () => {
-    state.animeDomainDraft.hostname = hostnameInput.value;
-  });
-
-  const permissionToggle = document.createElement('label');
-  permissionToggle.className = 'domain-permission-toggle';
-
-  const permissionCheckbox = document.createElement('input');
-  permissionCheckbox.type = 'checkbox';
-  permissionCheckbox.checked = state.animeDomainRequestPermission;
-  permissionCheckbox.addEventListener('change', () => {
-    state.animeDomainRequestPermission = permissionCheckbox.checked;
-  });
-
-  const permissionText = document.createElement('span');
-  permissionText.textContent = isStandaloneDomainsView
-    ? 'Minta permission domain sekarang'
-    : 'Minta permission sekarang. Popup mungkin tertutup saat dialog Chrome muncul.';
-
-  permissionToggle.append(permissionCheckbox, permissionText);
-
-  const actions = document.createElement('div');
-  actions.className = 'domain-form-actions';
-  if (isStandaloneDomainsView) {
-    actions.append(
-      createButton(
-        'Save Domain',
-        () => {
-          void saveAnimeDomainFromDraft(domains).catch((error: unknown) => {
-            const message =
-              describeUnknownError(error) || 'Failed to save anime domain.';
-            console.warn(
-              `${DEBUG_PREFIX} anime domain save failed ${stringifyForLog({
-                draft: state.animeDomainDraft,
-                errorMessage: message,
-                rawError: describeUnknownError(error),
-              })}`,
-            );
-            window.alert(message);
-          });
-        },
-        'primary',
-      ),
-      createButton('Cancel', () => {
-        closeAnimeDomainModal();
-        void renderPopup();
-      }),
-    );
-  } else {
-    actions.append(
-      createButton(
-        'Save Domain',
-        () => saveAnimeDomainFromPopup(domains),
-        'primary',
-      ),
-      createButton('Cancel', () => {
-        closeAnimeDomainModal();
-        void renderPopup();
-      }),
-    );
-  }
-
-  dialog.append(
-    title,
-    copy,
-    nameLabel,
-    nameInput,
-    currentDomainLabel,
-    currentDomainInput,
-    hostnameLabel,
-    hostnameInput,
-    permissionToggle,
-    actions,
-  );
-  overlay.append(dialog);
-  return overlay;
+  return button;
 }
 
-function createWatchCard(item: MediaItem): HTMLElement {
-  const card = document.createElement('article');
-  card.className = 'watch-card';
-
-  const content = document.createElement('div');
-  content.className = 'watch-card-content';
-
-  const badgeRow = document.createElement('div');
-  badgeRow.className = 'watch-card-badge-row';
-  if (item.platform === 'youtube') {
-    badgeRow.append(createBadge(item.platform, item.channel!));
-  } else if (item.platform === 'custom') {
-    badgeRow.append(createBadge(item.platform, item.siteName!));
-  } else {
-    badgeRow.append(createBadge(item.platform));
-  }
-
-  const title = document.createElement('h2');
-  title.className = 'watch-card-title';
-  title.textContent = item.title;
-
-  const titleRow = document.createElement('div');
-  titleRow.className = 'watch-card-title-row';
-  titleRow.append(title);
-
-  const metadata = document.createElement('p');
-  metadata.className = 'watch-card-meta';
-  metadata.textContent = buildMetadataText(item) || 'Metadata belum tersedia';
-
-  const watchedAt = document.createElement('p');
-  watchedAt.className = 'watch-card-time';
-  watchedAt.textContent = `Last watched: ${formatWatchTime(item.lastWatchedAt)}`;
-
-  const episodeStatus = document.createElement('p');
-  episodeStatus.className = 'watch-card-time';
-  const episodeStatusText = buildNetflixEpisodeStatusText(item);
-  if (episodeStatusText) {
-    episodeStatus.textContent = episodeStatusText;
-  }
-
-  const publishedAt = document.createElement('p');
-  publishedAt.className = 'watch-card-time';
-  const publishedText = formatPublishedDate(item.publishedAt);
-  if (publishedText) {
-    publishedAt.textContent = `Published: ${publishedText}`;
-  }
-
-  const publishedDayText = formatPublishedDay(item.publishedAt);
-  if (publishedDayText) {
-    titleRow.append(createUploadDayBadge(publishedDayText));
-  }
-
-  const footer = document.createElement('div');
-  footer.className = 'watch-card-footer';
-
-  const mainAction = createIconButton(
-    ICONS.play,
-    () => openUrl(item.url),
-    'primary',
-    item.platform === 'netflix' ? 'Netflix' : item.platform === 'youtube' ? 'YouTube' : 'Open Page'
-  );
-  mainAction.style.flexGrow = '1';
-
-  footer.append(
-    mainAction,
-    createIconButton(
-      item.isArchived ? ICONS.unarchive : ICONS.archive,
-      () => void setMediaItemArchived(item.id, !item.isArchived).then(() => renderPopup()),
-      'secondary'
-    ),
-    createIconButton(
-      ICONS.delete,
-      () => void removeMediaItem(item.id).then(() => renderPopup()),
-      'danger'
-    ),
-  );
-
-  content.append(badgeRow, titleRow, metadata, watchedAt);
-
-  if (episodeStatusText) {
-    content.append(episodeStatus);
-  }
-
-  if (publishedText) {
-    content.append(publishedAt);
-  }
-
-  content.append(footer);
-  card.append(content);
-  return card;
-}
-
-function createEmptyState(): HTMLElement {
-  const emptyState = document.createElement('section');
-  emptyState.className = 'empty-state';
-
-  const title = document.createElement('h2');
-  title.textContent = 'Belum ada history';
-
-  const description = document.createElement('p');
-  description.textContent =
-    'Buka Netflix, YouTube yang diizinkan, atau situs anime custom yang aktif, lalu riwayat akan muncul di sini.';
-
-  emptyState.append(title, description);
-  return emptyState;
-}
-
-function filterItems(items: MediaItem[], isAll: boolean = false): MediaItem[] {
-  let platformFiltered = items;
-  if (!isAll) {
-    platformFiltered = state.filter === 'all'
-      ? items
-      : items.filter((item) => item.platform === state.filter);
-  }
-
-  if (state.view === 'archives') {
-    return platformFiltered.filter((item) => item.isArchived);
-  }
-
-  if (state.view === 'history') {
-    return platformFiltered.filter((item) => !item.isArchived);
-  }
-
-  return platformFiltered;
+function createViewTabButton(label: string, value: ViewValue): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `view-tab${state.view === value ? ' is-active' : ''}`;
+  button.textContent = label;
+  button.addEventListener('click', () => {
+    state.view = value;
+    void renderPopup();
+  });
+  return button;
 }
 
 async function renderPopup(): Promise<void> {
@@ -1342,11 +268,12 @@ async function renderPopup(): Promise<void> {
     getAnimeDomains(),
     getTelegramSettings(),
   ]);
-  const items = [...storage.items].sort(
-    (left, right) =>
-      Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
-  );
-  const [filteredItems, allFilteredItems] = [filterItems(items), filterItems(items, true)];
+  const items = [...storage.items].sort((l, r) => Date.parse(r.lastWatchedAt) - Date.parse(l.lastWatchedAt));
+  
+  // Calculate shown / total counts
+  const isAll = state.filter === 'all';
+  const platformFiltered = isAll ? items : items.filter(i => i.platform === state.filter);
+  const allFilteredItems = state.view === 'archives' ? platformFiltered.filter(i => i.isArchived) : platformFiltered.filter(i => !i.isArchived);
 
   popupRoot.replaceChildren();
 
@@ -1355,222 +282,7 @@ async function renderPopup(): Promise<void> {
 
   const hero = document.createElement('header');
   hero.className = 'hero-panel';
-  hero.innerHTML =
-    '<h1 class="hero-title">Anime Watch Tracker</h1>';
-
-  const importInput = document.createElement('input');
-  importInput.type = 'file';
-  importInput.accept = 'application/json,.json';
-  importInput.className = 'visually-hidden';
-  importInput.addEventListener('change', () => {
-    const [file] = importInput.files ?? [];
-    if (!file) {
-      return;
-    }
-
-    void importJsonFile(file)
-      .then(() => renderPopup())
-      .catch((error: unknown) => {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Failed to import JSON file.';
-        window.alert(message);
-      })
-      .finally(() => {
-        importInput.value = '';
-      });
-  });
-
-  function createDataManagementSection(
-    items: MediaItem[],
-    importInput: HTMLInputElement
-  ): HTMLElement {
-    const section = document.createElement('section');
-    section.className = 'channels-panel';
-
-    const header = document.createElement('div');
-    header.className = 'channels-panel-header';
-    const title = document.createElement('h2');
-    title.className = 'channels-panel-title';
-    title.textContent = 'Data Management';
-    header.append(title);
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'toolbar';
-    toolbar.style.marginTop = '12px';
-    toolbar.append(
-      createButton('Import JSON', () => importInput.click()),
-      createButton('Export JSON', () => downloadJsonFile(items)),
-      createButton(
-        'Clear History',
-        () => void clearMediaStorage().then(() => renderPopup()),
-        'primary',
-      ),
-    );
-
-    section.append(header, toolbar);
-    return section;
-  }
-
-  const filters = document.createElement('div');
-  filters.className = 'filter-row';
-
-  function createTelegramSettingsSection(settings: TelegramSettings): HTMLElement {
-    const section = document.createElement('section');
-    section.className = 'channels-panel';
-
-    const header = document.createElement('div');
-    header.className = 'channels-panel-header';
-    const title = document.createElement('h2');
-    title.className = 'channels-panel-title';
-    title.textContent = 'Telegram Notifications';
-    header.append(title);
-
-    const enabledToggle = document.createElement('label');
-    enabledToggle.className = 'domain-permission-toggle';
-    enabledToggle.style.margin = '16px 0';
-    const enabledCheckbox = document.createElement('input');
-    enabledCheckbox.type = 'checkbox';
-    enabledCheckbox.checked = settings.enabled;
-    enabledCheckbox.addEventListener('change', () => {
-      void setTelegramSettings({
-        ...settings,
-        enabled: enabledCheckbox.checked,
-      });
-    });
-    const enabledText = document.createElement('span');
-    enabledText.textContent = 'Enable New Episode Notifications';
-    enabledToggle.append(enabledCheckbox, enabledText);
-
-    const container = document.createElement('div');
-    container.className = 'telegram-settings-container';
-    container.style.borderTop = '1px solid rgba(255, 255, 255, 0.07)';
-    container.style.paddingTop = '16px';
-    container.style.marginTop = '0';
-
-    // const formDescription = document.createElement('p');
-    // formDescription.className = 'channels-panel-copy';
-    // formDescription.textContent = 'Set up your bot credentials below to receive notifications.';
-    // container.append(formDescription);
-
-    const tokenGroup = document.createElement('div');
-    tokenGroup.style.display = 'flex';
-    tokenGroup.style.flexDirection = 'column';
-    tokenGroup.style.gap = '6px';
-
-    const tokenLabel = document.createElement('label');
-    tokenLabel.className = 'domain-label';
-    tokenLabel.textContent = 'Bot Token';
-    const tokenInputWrapper = document.createElement('div');
-    tokenInputWrapper.style.position = 'relative';
-    tokenInputWrapper.style.display = 'flex';
-    tokenInputWrapper.style.alignItems = 'center';
-
-    const tokenInput = document.createElement('input');
-    tokenInput.className = 'domain-input';
-    tokenInput.type = 'password';
-    tokenInput.placeholder = 'e.g. 123456789:ABCDefghIJKlmnOPQRstuvWXYZ';
-    tokenInput.style.paddingRight = '40px';
-    tokenInput.value = settings.botToken;
-
-    const tokenToggleBtn = document.createElement('button');
-    tokenToggleBtn.type = 'button';
-    tokenToggleBtn.innerHTML = ICONS.eye;
-    tokenToggleBtn.style.position = 'absolute';
-    tokenToggleBtn.style.right = '10px';
-    tokenToggleBtn.style.background = 'transparent';
-    tokenToggleBtn.style.border = 'none';
-    tokenToggleBtn.style.color = 'var(--muted)';
-    tokenToggleBtn.style.cursor = 'pointer';
-    tokenToggleBtn.style.display = 'flex';
-    tokenToggleBtn.addEventListener('click', () => {
-      if (tokenInput.type === 'password') {
-        tokenInput.type = 'text';
-        tokenToggleBtn.innerHTML = ICONS.eyeOff;
-      } else {
-        tokenInput.type = 'password';
-        tokenToggleBtn.innerHTML = ICONS.eye;
-      }
-    });
-
-    tokenInputWrapper.append(tokenInput, tokenToggleBtn);
-    tokenGroup.append(tokenLabel, tokenInputWrapper);
-
-    const chatGroup = document.createElement('div');
-    chatGroup.style.display = 'flex';
-    chatGroup.style.flexDirection = 'column';
-    chatGroup.style.gap = '6px';
-
-    const chatLabel = document.createElement('label');
-    chatLabel.className = 'domain-label';
-    chatLabel.textContent = 'Chat ID';
-    const chatInputWrapper = document.createElement('div');
-    chatInputWrapper.style.position = 'relative';
-    chatInputWrapper.style.display = 'flex';
-    chatInputWrapper.style.alignItems = 'center';
-
-    const chatInput = document.createElement('input');
-    chatInput.className = 'domain-input';
-    chatInput.type = 'password';
-    chatInput.placeholder = 'e.g. 123456789 or @channelname';
-    chatInput.style.paddingRight = '40px';
-    chatInput.value = settings.chatId;
-
-    const chatToggleBtn = document.createElement('button');
-    chatToggleBtn.type = 'button';
-    chatToggleBtn.innerHTML = ICONS.eye;
-    chatToggleBtn.style.position = 'absolute';
-    chatToggleBtn.style.right = '10px';
-    chatToggleBtn.style.background = 'transparent';
-    chatToggleBtn.style.border = 'none';
-    chatToggleBtn.style.color = 'var(--muted)';
-    chatToggleBtn.style.cursor = 'pointer';
-    chatToggleBtn.style.display = 'flex';
-    chatToggleBtn.addEventListener('click', () => {
-      if (chatInput.type === 'password') {
-        chatInput.type = 'text';
-        chatToggleBtn.innerHTML = ICONS.eyeOff;
-      } else {
-        chatInput.type = 'password';
-        chatToggleBtn.innerHTML = ICONS.eye;
-      }
-    });
-
-    chatInputWrapper.append(chatInput, chatToggleBtn);
-    chatGroup.append(chatLabel, chatInputWrapper);
-
-    const actions = document.createElement('div');
-    actions.className = 'domain-form-actions';
-
-    const saveBtn = createButton('Save Settings', () => {
-      void setTelegramSettings({
-        enabled: enabledCheckbox.checked,
-        botToken: tokenInput.value.trim(),
-        chatId: chatInput.value.trim()
-      }).then(() => {
-        window.alert('Telegram credentials saved!');
-        void renderPopup();
-      });
-    }, 'primary');
-
-    const testBtn = createButton('Test Notification', () => {
-      chrome.runtime.sendMessage({ type: 'anime-watch-tracker:test-telegram' });
-    });
-
-    actions.append(saveBtn, testBtn);
-
-    container.append(tokenGroup, chatGroup, actions);
-    section.append(header, enabledToggle, container);
-
-    return section;
-  }
-  filters.append(
-    createFilterButton('All', 'all'),
-    createFilterButton('Netflix', 'netflix'),
-    createFilterButton('YouTube', 'youtube'),
-    createFilterButton('Custom', 'custom'),
-  );
+  hero.innerHTML = '<h1 class="hero-title">Anime Watch Tracker</h1>';
 
   const tabs = document.createElement('div');
   tabs.className = 'view-tabs';
@@ -1580,68 +292,197 @@ async function renderPopup(): Promise<void> {
     createViewTabButton('Settings', 'settings'),
   );
 
-  const summary = document.createElement('section');
-  summary.className = 'summary-panel';
-  summary.innerHTML = `<p>${filteredItems.length} shown</p><p>${allFilteredItems.length} Items</p>`;
-
   container.append(hero, tabs);
 
   if (state.view === 'history' || state.view === 'archives') {
-    const content = document.createElement('section');
-    content.className = 'content';
-
-    if (filteredItems.length === 0) {
-      if (state.view === 'archives') {
-        const emptyState = createEmptyState();
-        const title = emptyState.querySelector('h2');
-        const desc = emptyState.querySelector('p');
-        if (title) title.textContent = 'Belum ada arsip';
-        if (desc) desc.textContent = 'Anime yang Anda arsipkan akan muncul di sini.';
-        content.append(emptyState);
-      } else {
-        content.append(createEmptyState());
-      }
-    } else {
-      for (const item of filteredItems) {
-        content.append(createWatchCard(item));
-      }
-    }
-
-    container.append(filters, summary, content);
-  } else if (state.view === 'settings') {
-    const settingsTabs = document.createElement('div');
-    settingsTabs.className = 'filter-row'; // Reuse the filter-row style for settings tabs
-    settingsTabs.style.marginBottom = '16px';
-
-    const createSettingsTab = (label: string, view: SettingsViewValue) => {
-      const btn = document.createElement('button');
-      btn.className = `filter-chip ${state.settingsView === view ? 'is-active' : ''}`;
-      btn.textContent = label;
-      btn.addEventListener('click', () => {
-        state.settingsView = view;
-        void setLastSettingsView(view);
-        void renderPopup();
-      });
-      return btn;
-    };
-
-    settingsTabs.append(
-      createSettingsTab('Data', 'data'),
-      createSettingsTab('Telegram', 'telegram'),
-      createSettingsTab('YouTube', 'youtube'),
-      createSettingsTab('Custom', 'custom'),
+    const filters = document.createElement('div');
+    filters.className = 'filter-row';
+    filters.append(
+      createFilterButton('All', 'all'),
+      createFilterButton('Netflix', 'netflix'),
+      createFilterButton('YouTube', 'youtube'),
+      createFilterButton('Custom', 'custom'),
     );
 
-    container.append(settingsTabs);
+    const summary = document.createElement('section');
+    summary.className = 'summary-panel';
+    summary.innerHTML = `<p>${allFilteredItems.length} shown</p><p>${allFilteredItems.length} Items</p>`;
+
+    container.append(filters, summary);
+
+    container.append(
+      createHistoryTab({
+        items,
+        filter: state.filter,
+        view: state.view,
+        onOpenUrl: openUrl,
+        onToggleArchive: async (id, isArchived) => {
+          await setMediaItemArchived(id, isArchived);
+          await renderPopup();
+        },
+        onDelete: async (id) => {
+          await removeMediaItem(id);
+          await renderPopup();
+        },
+      })
+    );
+  } else if (state.view === 'settings') {
+    container.append(
+      createSettingsTabNavigation({
+        currentView: state.settingsView,
+        onTabClick: (view) => {
+          state.settingsView = view;
+          void setLastSettingsView(view);
+          void renderPopup();
+        }
+      })
+    );
 
     if (state.settingsView === 'data') {
-      container.append(createDataManagementSection(items, importInput), importInput);
+      const importInput = document.createElement('input');
+      importInput.type = 'file';
+      importInput.accept = 'application/json,.json';
+      importInput.className = 'visually-hidden';
+      importInput.addEventListener('change', () => {
+        const [file] = importInput.files ?? [];
+        if (!file) return;
+        void importJsonFile(file)
+          .then(() => renderPopup())
+          .catch((error: unknown) => {
+            window.alert(error instanceof Error ? error.message : 'Failed to import JSON file.');
+          })
+          .finally(() => { importInput.value = ''; });
+      });
+
+      const dataSection = createDataManagementSection({
+        onImportClick: () => importInput.click(),
+        onExportClick: () => downloadJsonFile(items),
+        onClearHistoryClick: () => {
+          void clearMediaStorage().then(() => renderPopup());
+        },
+      });
+      container.append(dataSection, importInput);
     } else if (state.settingsView === 'telegram') {
-      container.append(createTelegramSettingsSection(telegramSettings));
+      container.append(
+        createTelegramSettingsSection({
+          settings: telegramSettings,
+          onToggle: (enabled) => {
+            void setTelegramSettings({ ...telegramSettings, enabled });
+          },
+          onSave: (botToken, chatId) => {
+            void setTelegramSettings({ enabled: telegramSettings.enabled, botToken, chatId }).then(() => {
+              window.alert('Telegram credentials saved!');
+              void renderPopup();
+            });
+          },
+          onTest: () => {
+            chrome.runtime.sendMessage({ type: 'anime-watch-tracker:test-telegram' });
+          }
+        })
+      );
     } else if (state.settingsView === 'youtube') {
-      container.append(createYouTubeChannelsSection(youtubeChannels));
+      container.append(
+        createYouTubeChannelsSection({
+          channels: youtubeChannels,
+          draft: state.youtubeChannelDraft,
+          isModalOpen: state.youtubeChannelModalOpen,
+          onOpenModal: (channel) => {
+            if (channel) {
+              state.youtubeChannelDraft = { id: channel.id, createdAt: channel.createdAt, name: channel.name, handle: channel.handle ?? '' };
+            } else {
+              state.youtubeChannelDraft = { id: null, name: '', handle: '' };
+            }
+            state.youtubeChannelModalOpen = true;
+            void renderPopup();
+          },
+          onCloseModal: () => {
+            state.youtubeChannelModalOpen = false;
+            void renderPopup();
+          },
+          onUpdateDraft: (updates) => {
+            state.youtubeChannelDraft = { ...state.youtubeChannelDraft, ...updates };
+          },
+          onSaveChannel: async () => {
+            const name = state.youtubeChannelDraft.name.trim().replace(/\s+/g, ' ');
+            if (!name) throw new Error('Channel name is required.');
+            const handle = state.youtubeChannelDraft.handle.trim();
+            const normalizedHandle = handle ? normalizeChannelHandle(handle) : null;
+            const existingChannel = youtubeChannels.find((ch) => {
+              if (ch.id === state.youtubeChannelDraft.id) return true;
+              if (normalizedHandle && ch.handle) return normalizeChannelHandle(ch.handle) === normalizedHandle;
+              return ch.name.trim().toLowerCase() === name.toLowerCase();
+            });
+
+            await upsertYouTubeChannel({
+              id: state.youtubeChannelDraft.id ?? existingChannel?.id ?? `youtube-channel-${Date.now()}`,
+              name,
+              handle: normalizedHandle ? `@${normalizedHandle}` : null,
+              enabled: existingChannel?.enabled ?? true,
+              createdAt: state.youtubeChannelDraft.createdAt ?? existingChannel?.createdAt,
+            });
+
+            state.youtubeChannelModalOpen = false;
+            state.youtubeChannelDraft = { id: null, name: '', handle: '' };
+            await renderPopup();
+          },
+          onToggleChannel: async (channel) => {
+            await upsertYouTubeChannel({ ...channel, enabled: !channel.enabled });
+            await renderPopup();
+          },
+          onDeleteChannel: async (id) => {
+            await removeYouTubeChannel(id);
+            await renderPopup();
+          }
+        })
+      );
     } else if (state.settingsView === 'custom') {
-      container.append(createAnimeDomainsSection(animeDomains));
+      container.append(
+        createAnimeDomainsSection({
+          domains: animeDomains,
+          draft: state.animeDomainDraft,
+          isModalOpen: state.animeDomainModalOpen,
+          requestPermission: state.animeDomainRequestPermission,
+          isStandaloneDomainsView,
+          onOpenModal: (domain) => {
+            if (domain) {
+              state.animeDomainDraft = {
+                id: domain.id, createdAt: domain.createdAt, name: domain.name,
+                currentDomain: domain.grantedOrigin ? normalizeCurrentDomainInput(domain.grantedOrigin) : '',
+                hostname: domain.hostname,
+              };
+            } else {
+              state.animeDomainDraft = { id: null, name: '', currentDomain: '', hostname: '' };
+            }
+            state.animeDomainModalOpen = true;
+            void renderPopup();
+          },
+          onCloseModal: () => {
+            state.animeDomainModalOpen = false;
+            void renderPopup();
+          },
+          onUpdateDraft: (updates) => {
+            state.animeDomainDraft = { ...state.animeDomainDraft, ...updates };
+          },
+          onToggleRequestPermission: (request) => {
+            state.animeDomainRequestPermission = request;
+          },
+          onSaveDomain: async () => {
+            if (isStandaloneDomainsView) {
+              await saveAnimeDomainFromDraft(animeDomains);
+            } else {
+              saveAnimeDomainFromPopup(animeDomains);
+            }
+          },
+          onToggleDomain: async (domain) => {
+            await upsertAnimeDomain({ ...domain, enabled: !domain.enabled });
+            await renderPopup();
+          },
+          onDeleteDomain: async (id) => {
+            await removeAnimeDomain(id);
+            await renderPopup();
+          }
+        })
+      );
     }
   }
 

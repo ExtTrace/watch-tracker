@@ -25,6 +25,7 @@ import {
   normalizeTitle,
   parseYouTubeTitleParts
 } from './id';
+import { NETFLIX_URL } from '../config/env';
 
 export const defaultMediaStorage: MediaStorage = {
   items: [],
@@ -46,7 +47,7 @@ function extractNetflixTitleId(value: string | null | undefined): string | null 
   }
 
   try {
-    const parsedUrl = new URL(value, 'https://www.netflix.com');
+    const parsedUrl = new URL(value, NETFLIX_URL);
 
     const pathnameTitleMatch = parsedUrl.pathname.match(/\/title\/(\d{6,})/i);
     if (pathnameTitleMatch) {
@@ -81,10 +82,10 @@ function extractNetflixTitleId(value: string | null | undefined): string | null 
 
 function buildNetflixOpenUrl(title: string, titleId: string | null): string {
   if (titleId) {
-    return `https://www.netflix.com/title/${titleId}`;
+    return `${NETFLIX_URL}/title/${titleId}`;
   }
 
-  return `https://www.netflix.com/search?q=${encodeURIComponent(title)}`;
+  return `${NETFLIX_URL}/search?q=${encodeURIComponent(title)}`;
 }
 
 function normalizeChannelName(value: string): string {

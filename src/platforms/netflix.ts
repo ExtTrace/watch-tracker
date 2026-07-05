@@ -1,6 +1,7 @@
 import type { MediaItem } from '../types/media';
 import { cleanText, getStructuredDataEntries } from '../utils/dom';
 import { createNetflixItemId } from '../utils/id';
+import { NETFLIX_URL } from '../config/env';
 
 const DEBUG_PREFIX = '[Anime Watch Tracker]';
 
@@ -155,10 +156,10 @@ function extractNetflixTitleId(): string | null {
 
 function buildNetflixOpenUrl(title: string, titleId: string | null): string {
   if (titleId) {
-    return `https://www.netflix.com/title/${titleId}`;
+    return `${NETFLIX_URL}/title/${titleId}`;
   }
 
-  return `https://www.netflix.com/search?q=${encodeURIComponent(title)}`;
+  return `${NETFLIX_URL}/search?q=${encodeURIComponent(title)}`;
 }
 
 function normalizeIsoDateString(value: string | null | undefined): string | null {
@@ -319,8 +320,8 @@ function stringsEqual(
 
   return Boolean(
     normalizedLeft &&
-      normalizedRight &&
-      normalizedLeft === normalizedRight,
+    normalizedRight &&
+    normalizedLeft === normalizedRight,
   );
 }
 
@@ -895,7 +896,7 @@ export async function lookupNetflixPublishedAt(
     return null;
   }
 
-  const titleUrl = `https://www.netflix.com/title/${titleId}`;
+  const titleUrl = `${NETFLIX_URL}/title/${titleId}`;
 
   try {
     const response = await fetch(titleUrl, {
@@ -934,7 +935,7 @@ export async function lookupNetflixEpisodeState(
     };
   }
 
-  const titleUrl = `https://www.netflix.com/title/${titleId}`;
+  const titleUrl = `${NETFLIX_URL}/title/${titleId}`;
 
   try {
     const response = await fetch(titleUrl, {
@@ -1247,7 +1248,7 @@ export function isEpisodeMetadataText(text: string): boolean {
   }
 
   const metadataText = normalizeMetadataText(normalized);
-  return /^(?:s\d+\s*:\s*e\d+\b|s(?:eason)?\s+\d+\s*[:,-]?\s*e(?:pisode)?\s+\d+\b|season\s+\d+\s+episode\s+\d+\b|e(?:pisode)?\s*\d+\b)/i.test(
+  return /^(?:s\d+\s*:\s*e\d+\b|s(?:eason)?\s+\d+\s*[:,-]?\s*e(?:pisode)?\s+\d+\b|season\s+\d+\s+episode\s+\d+\b|e(?:pisode)?\s*\d+\b|s(?:eason)?\s+\d+$)/i.test(
     metadataText,
   );
 }

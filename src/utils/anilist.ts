@@ -1,3 +1,5 @@
+import { ANILIST_API_URL } from "../config/env"
+
 export interface AniListResult {
   id: number;
   title: {
@@ -27,7 +29,6 @@ export async function searchAniListAnime(query: string): Promise<AniListResult |
     }
   `;
 
-  const url = 'https://graphql.anilist.co';
   const options = {
     method: 'POST',
     headers: {
@@ -41,7 +42,7 @@ export async function searchAniListAnime(query: string): Promise<AniListResult |
   };
 
   try {
-    const response = await fetch(url, options);
+    const response = await fetch(ANILIST_API_URL, options);
     if (!response.ok) {
       return null;
     }

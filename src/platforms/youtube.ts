@@ -8,6 +8,7 @@ import {
   parseYouTubeTitleParts,
 } from '../utils/id';
 import { YOUTUBE_CHANNELS_KEY } from '../constants/storage';
+import { YOUTUBE_URL, YOUTUBE_IMG_URL } from '../config/env';
 
 const TITLE_SELECTORS = ['h1.ytd-watch-metadata', 'h1.title'];
 const CHANNEL_SELECTORS = ['ytd-channel-name a', '#channel-name a'];
@@ -355,7 +356,7 @@ export async function extractYouTubeWatchData(): Promise<MediaItem | null> {
 
   const parsedTitle = parseYouTubeTitleParts(rawTitle);
 
-  const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const canonicalUrl = `${YOUTUBE_URL}/watch?v=${videoId}`;
 
   return {
     id: createYouTubeItemId(videoId),
@@ -366,7 +367,7 @@ export async function extractYouTubeWatchData(): Promise<MediaItem | null> {
     creator: channel,
     episode: parsedTitle.episode,
     duration: extractYouTubeDuration(),
-    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    thumbnail: `${YOUTUBE_IMG_URL}/vi/${videoId}/hqdefault.jpg`,
     publishedAt: extractYouTubePublishedAt(),
     url: canonicalUrl,
     lastWatchedAt: new Date().toISOString(),

@@ -1,9 +1,11 @@
+import { TELEGRAM_API_URL } from "../config/env";
+
 export async function sendTelegramNotification(
   botToken: string,
   chatId: string,
   message: string,
 ): Promise<void> {
-  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  const url = `${TELEGRAM_API_URL}/bot${botToken}/sendMessage`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {

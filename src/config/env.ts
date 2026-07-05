@@ -1,0 +1,5 @@
+export const NETFLIX_URL = "https://www.netflix.com"
+export const YOUTUBE_URL = "https://www.youtube.com"
+export const YOUTUBE_IMG_URL = "https://img.youtube.com"
+export const ANILIST_API_URL = "https://graphql.anilist.co"
+export const TELEGRAM_API_URL = "https://api.telegram.org"
