@@ -369,8 +369,8 @@ async function renderPopup(): Promise<void> {
           onToggle: (enabled) => {
             void setTelegramSettings({ ...telegramSettings, enabled });
           },
-          onSave: (botToken, chatId) => {
-            void setTelegramSettings({ enabled: telegramSettings.enabled, botToken, chatId }).then(() => {
+          onSave: (chatId) => {
+            void setTelegramSettings({ enabled: telegramSettings.enabled, chatId }).then(() => {
               window.alert('Telegram credentials saved!');
               void renderPopup();
             });

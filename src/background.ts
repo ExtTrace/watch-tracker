@@ -103,7 +103,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function checkNewEpisodes(): Promise<void> {
   const settings = await getTelegramSettings();
-  if (!settings.enabled || !settings.botToken || !settings.chatId) return;
+  if (!settings.enabled || !settings.chatId) return;
 
   const storage = await getMediaStorage();
   let updated = false;
@@ -161,7 +161,7 @@ async function checkNewEpisodes(): Promise<void> {
       updated = true;
       const message = `🎬 <b>Episode Baru Rilis!</b>\n\n<b>${item.title}</b>\n${newEpisodeTitle}\n\n<a href="${link}">Tonton Sekarang</a>`;
       try {
-        await sendTelegramNotification(settings.botToken, settings.chatId, message);
+        await sendTelegramNotification(settings.chatId, message);
       } catch (err) {
         console.error('Failed to notify', err);
       }
@@ -220,11 +220,11 @@ chrome.permissions.onAdded.addListener(async (permissions) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'anime-watch-tracker:test-telegram') {
     getTelegramSettings().then((settings) => {
-      if (!settings.botToken || !settings.chatId) {
-        console.warn('Bot token or Chat ID is missing');
+      if (!settings.chatId) {
+        console.warn('Chat ID is missing');
         return;
       }
-      sendTelegramNotification(settings.botToken, settings.chatId, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan berhasil!').catch(console.error);
+      sendTelegramNotification(settings.chatId, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan berhasil!').catch(console.error);
     }).catch(console.error);
     sendResponse({ status: 'ok' });
     return;

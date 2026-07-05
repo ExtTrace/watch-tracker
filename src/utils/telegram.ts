@@ -1,25 +1,22 @@
-import { TELEGRAM_API_URL } from "../config/env";
+import { WT_API_URL } from "../config/env";
 
 export async function sendTelegramNotification(
-  botToken: string,
   chatId: string,
   message: string,
 ): Promise<void> {
-  const url = `${TELEGRAM_API_URL}/bot${botToken}/sendMessage`;
+  const url = `${WT_API_URL}/api/notify`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      chat_id: chatId,
-      text: message,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
+      chatId,
+      message,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Telegram API Error: ${response.status} ${response.statusText}`);
+    throw new Error(`WT API Error: ${response.status} ${response.statusText}`);
   }
 }

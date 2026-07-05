@@ -4,7 +4,7 @@ import type { TelegramSettings } from '../../types/media';
 type TelegramSettingsProps = {
   settings: TelegramSettings;
   onToggle: (enabled: boolean) => void;
-  onSave: (botToken: string, chatId: string) => void;
+  onSave: (chatId: string) => void;
   onTest: () => void;
 };
 
@@ -42,49 +42,6 @@ export function createTelegramSettingsSection({
   container.style.borderTop = '1px solid rgba(255, 255, 255, 0.07)';
   container.style.paddingTop = '16px';
   container.style.marginTop = '0';
-
-  const tokenGroup = document.createElement('div');
-  tokenGroup.style.display = 'flex';
-  tokenGroup.style.flexDirection = 'column';
-  tokenGroup.style.gap = '6px';
-
-  const tokenLabel = document.createElement('label');
-  tokenLabel.className = 'domain-label';
-  tokenLabel.textContent = 'Bot Token';
-  const tokenInputWrapper = document.createElement('div');
-  tokenInputWrapper.style.position = 'relative';
-  tokenInputWrapper.style.display = 'flex';
-  tokenInputWrapper.style.alignItems = 'center';
-
-  const tokenInput = document.createElement('input');
-  tokenInput.className = 'domain-input';
-  tokenInput.type = 'password';
-  tokenInput.placeholder = 'e.g. 123456789:ABCDefghIJKlmnOPQRstuvWXYZ';
-  tokenInput.style.paddingRight = '40px';
-  tokenInput.value = settings.botToken;
-
-  const tokenToggleBtn = document.createElement('button');
-  tokenToggleBtn.type = 'button';
-  tokenToggleBtn.innerHTML = ICONS.eye;
-  tokenToggleBtn.style.position = 'absolute';
-  tokenToggleBtn.style.right = '10px';
-  tokenToggleBtn.style.background = 'transparent';
-  tokenToggleBtn.style.border = 'none';
-  tokenToggleBtn.style.color = 'var(--muted)';
-  tokenToggleBtn.style.cursor = 'pointer';
-  tokenToggleBtn.style.display = 'flex';
-  tokenToggleBtn.addEventListener('click', () => {
-    if (tokenInput.type === 'password') {
-      tokenInput.type = 'text';
-      tokenToggleBtn.innerHTML = ICONS.eyeOff;
-    } else {
-      tokenInput.type = 'password';
-      tokenToggleBtn.innerHTML = ICONS.eye;
-    }
-  });
-
-  tokenInputWrapper.append(tokenInput, tokenToggleBtn);
-  tokenGroup.append(tokenLabel, tokenInputWrapper);
 
   const chatGroup = document.createElement('div');
   chatGroup.style.display = 'flex';
@@ -127,20 +84,26 @@ export function createTelegramSettingsSection({
   });
 
   chatInputWrapper.append(chatInput, chatToggleBtn);
-  chatGroup.append(chatLabel, chatInputWrapper);
+  
+  const helperText = document.createElement('p');
+  helperText.className = 'channel-item-meta';
+  helperText.style.marginTop = '4px';
+  helperText.innerHTML = 'Kirim pesan <b>/start</b> ke bot Telegram kita untuk mendapatkan Chat ID Anda.';
+  
+  chatGroup.append(chatLabel, chatInputWrapper, helperText);
 
   const actions = document.createElement('div');
   actions.className = 'domain-form-actions';
 
   const saveBtn = createButton('Save Settings', () => {
-    onSave(tokenInput.value.trim(), chatInput.value.trim());
+    onSave(chatInput.value.trim());
   }, 'primary');
 
   const testBtn = createButton('Test Notification', onTest);
 
   actions.append(saveBtn, testBtn);
 
-  container.append(tokenGroup, chatGroup, actions);
+  container.append(chatGroup, actions);
   section.append(header, enabledToggle, container);
 
   return section;

@@ -32,7 +32,6 @@ export const defaultMediaStorage: MediaStorage = {
 };
 
 const DEFAULT_TELEGRAM_SETTINGS: TelegramSettings = {
-  botToken: '',
   chatId: '',
   enabled: false,
 };
@@ -676,7 +675,6 @@ export function getTelegramSettings(): Promise<TelegramSettings> {
 
         const settings = result[TELEGRAM_SETTINGS_KEY] as TelegramSettings | undefined;
         resolve({
-          botToken: settings?.botToken ?? DEFAULT_TELEGRAM_SETTINGS.botToken,
           chatId: settings?.chatId ?? DEFAULT_TELEGRAM_SETTINGS.chatId,
           enabled: settings?.enabled ?? DEFAULT_TELEGRAM_SETTINGS.enabled,
         });

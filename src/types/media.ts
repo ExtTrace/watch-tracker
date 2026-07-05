@@ -43,7 +43,6 @@ export interface MediaItem {
 }
 
 export interface TelegramSettings {
-  botToken: string;
   chatId: string;
   enabled: boolean;
 }
