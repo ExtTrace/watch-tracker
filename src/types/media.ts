@@ -40,10 +40,16 @@ export interface MediaItem {
   isArchived?: boolean;
   lastWatchedAt: string;
   lastNotifiedEpisode?: string | null;
+  lastNotifiedReminderEpisode?: string | null;
 }
 
 export interface TelegramSettings {
   chatId: string;
+  enabled: boolean;
+}
+
+export interface DiscordSettings {
+  webhookUrl: string;
   enabled: boolean;
 }
 

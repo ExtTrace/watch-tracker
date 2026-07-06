@@ -1,7 +1,9 @@
-import { getAnimeDomains, setAnimeDomains, getMediaStorage, setMediaStorage, getTelegramSettings, migrateStorage } from './utils/storage';
+import { getAnimeDomains, setAnimeDomains, getMediaStorage, setMediaStorage, getTelegramSettings, getDiscordSettings, migrateStorage } from './utils/storage';
 import { normalizeHostname } from './utils/id';
 import { sendTelegramNotification } from './utils/telegram';
 import { searchAniListAnime } from './utils/anilist';
+import { dateFormatter } from './utils/formatters';
+import { sendDiscordNotification } from './utils/discord';
 
 
 
@@ -109,11 +111,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function checkNewEpisodes(): Promise<void> {
   const settings = await getTelegramSettings();
-  if (!settings.enabled || !settings.chatId) return;
+  const discordSettings = await getDiscordSettings();
+
+  if ((!settings.enabled || !settings.chatId) && (!discordSettings.enabled || !discordSettings.webhookUrl)) {
+    return;
+  }
 
   const storage = await getMediaStorage();
   let updated = false;
   const newlyReleased: { title: string; episode: string; link: string }[] = [];
+  const upcomingReminders: { title: string; episode: string; time: string; link: string }[] = [];
 
   for (const item of storage.items) {
     if (item.isArchived) continue;
@@ -121,9 +128,27 @@ async function checkNewEpisodes(): Promise<void> {
     let shouldQuery = true;
     if (item.nextEpisodeAvailableAt) {
       const nextAiringMs = new Date(item.nextEpisodeAvailableAt).getTime();
-      // If the current time is still BEFORE the known next airing time, do NOT hit the API
-      if (Date.now() < nextAiringMs) {
+      const now = Date.now();
+      const timeUntilAiring = nextAiringMs - now;
+
+      if (timeUntilAiring > 0) {
         shouldQuery = false;
+        
+        // Reminder within 24 hours
+        const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        if (timeUntilAiring <= ONE_DAY_MS && item.nextEpisode) {
+          const reminderStr = `Episode ${item.nextEpisode}`;
+          if (item.lastNotifiedReminderEpisode !== reminderStr) {
+            item.lastNotifiedReminderEpisode = reminderStr;
+            updated = true;
+            upcomingReminders.push({
+              title: item.title,
+              episode: reminderStr,
+              time: item.nextEpisodeAvailableAt,
+              link: item.url,
+            });
+          }
+        }
       }
     }
 
@@ -139,6 +164,7 @@ async function checkNewEpisodes(): Promise<void> {
 
         // Save the FUTURE airing time so we don't hit the API again until this time passes
         item.nextEpisodeAvailableAt = new Date(anilistResult.nextAiringEpisode.airingAt * 1000).toISOString();
+        item.nextEpisode = nextEpNum.toString();
 
         if (
           latestAiredEpNum > 0 &&
@@ -157,21 +183,44 @@ async function checkNewEpisodes(): Promise<void> {
         // If nextAiringEpisode is null, the anime might be finished.
         // Set to check again in 7 days to avoid spamming the API for completed series.
         item.nextEpisodeAvailableAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        item.nextEpisode = null;
         updated = true;
       }
     }
   }
 
+  let fullMessage = '';
+
+  if (upcomingReminders.length > 0) {
+    fullMessage += `⏰ <b>${upcomingReminders.length} Anime Akan Tayang (Besok)!</b>\n\n`;
+    for (const reminder of upcomingReminders) {
+      const formattedTime = dateFormatter.format(new Date(reminder.time));
+      fullMessage += `<b>${reminder.title}</b>\n${reminder.episode} - ${formattedTime}\n<a href="${reminder.link}">Tonton Besok</a>\n\n`;
+    }
+  }
+
   if (newlyReleased.length > 0) {
-    let message = `🎬 <b>${newlyReleased.length} Episode Baru Rilis!</b>\n\n`;
+    fullMessage += `🎬 <b>${newlyReleased.length} Anime Sedang Tayang!</b>\n\n`;
     for (const release of newlyReleased) {
-      message += `<b>${release.title}</b>\n${release.episode} - <a href="${release.link}">Tonton Sekarang</a>\n\n`;
+      fullMessage += `<b>${release.title}</b>\n${release.episode} - <a href="${release.link}">Tonton Sekarang</a>\n\n`;
+    }
+  }
+
+  if (fullMessage.trim()) {
+    if (settings.enabled && settings.chatId) {
+      try {
+        await sendTelegramNotification(settings.chatId, fullMessage.trim());
+      } catch (err) {
+        console.error('Failed to notify telegram', err);
+      }
     }
 
-    try {
-      await sendTelegramNotification(settings.chatId, message.trim());
-    } catch (err) {
-      console.error('Failed to notify', err);
+    if (discordSettings.enabled && discordSettings.webhookUrl) {
+      try {
+        await sendDiscordNotification(discordSettings.webhookUrl, fullMessage.trim());
+      } catch (err) {
+        console.error('Failed to notify discord', err);
+      }
     }
   }
 
@@ -231,7 +280,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         console.warn('Chat ID is missing');
         return;
       }
-      sendTelegramNotification(settings.chatId, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan berhasil!').catch(console.error);
+      sendTelegramNotification(settings.chatId, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan Telegram berhasil!').catch(console.error);
+    }).catch(console.error);
+    sendResponse({ status: 'ok' });
+    return;
+  }
+
+  if (message?.type === 'anime-watch-tracker:test-discord') {
+    getDiscordSettings().then((settings) => {
+      if (!settings.webhookUrl) {
+        console.warn('Webhook URL is missing');
+        return;
+      }
+      sendDiscordNotification(settings.webhookUrl, '🔔 <b>Anime Watch Tracker</b>\n\nNotifikasi percobaan Discord berhasil!').catch(console.error);
     }).catch(console.error);
     sendResponse({ status: 'ok' });
     return;

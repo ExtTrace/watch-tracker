@@ -1,17 +1,19 @@
 import {
   ANIME_DOMAINS_KEY,
+  DISCORD_SETTINGS_KEY,
   LAST_FILTER_KEY,
+  LAST_SETTINGS_VIEW_KEY,
   STORAGE_KEY,
   STORAGE_WARN_PREFIX,
-  YOUTUBE_CHANNELS_KEY,
   TELEGRAM_SETTINGS_KEY,
-  LAST_SETTINGS_VIEW_KEY,
+  YOUTUBE_CHANNELS_KEY,
 } from '../constants/storage';
 import type {
   AllowedYouTubeChannel,
   AnimeDomain,
   LegacyNetflixItem,
   MediaItem,
+  DiscordSettings,
   MediaStorage,
   Platform,
   TelegramSettings,
@@ -33,6 +35,11 @@ export const defaultMediaStorage: MediaStorage = {
 
 const DEFAULT_TELEGRAM_SETTINGS: TelegramSettings = {
   chatId: '',
+  enabled: false,
+};
+
+const DEFAULT_DISCORD_SETTINGS: DiscordSettings = {
+  webhookUrl: '',
   enabled: false,
 };
 
@@ -761,6 +768,57 @@ export function setTelegramSettings(settings: TelegramSettings): Promise<void> {
       });
     } catch (error) {
       console.warn(`${STORAGE_WARN_PREFIX} failed to set telegram settings`, error);
+      resolve();
+    }
+  });
+}
+
+export function getDiscordSettings(): Promise<DiscordSettings> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve({ ...DEFAULT_DISCORD_SETTINGS });
+      return;
+    }
+
+    try {
+      storageArea.get([DISCORD_SETTINGS_KEY], (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn(`${STORAGE_WARN_PREFIX} ${chrome.runtime.lastError.message}`);
+          resolve({ ...DEFAULT_DISCORD_SETTINGS });
+          return;
+        }
+
+        const settings = result[DISCORD_SETTINGS_KEY] as DiscordSettings | undefined;
+        resolve({
+          webhookUrl: settings?.webhookUrl ?? DEFAULT_DISCORD_SETTINGS.webhookUrl,
+          enabled: settings?.enabled ?? DEFAULT_DISCORD_SETTINGS.enabled,
+        });
+      });
+    } catch (error) {
+      console.warn(`${STORAGE_WARN_PREFIX} failed to get discord settings`, error);
+      resolve({ ...DEFAULT_DISCORD_SETTINGS });
+    }
+  });
+}
+
+export function setDiscordSettings(settings: DiscordSettings): Promise<void> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve();
+      return;
+    }
+
+    try {
+      storageArea.set({ [DISCORD_SETTINGS_KEY]: settings }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn(`${STORAGE_WARN_PREFIX} ${chrome.runtime.lastError.message}`);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn(`${STORAGE_WARN_PREFIX} failed to set discord settings`, error);
       resolve();
     }
   });

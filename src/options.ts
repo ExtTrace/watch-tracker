@@ -1,12 +1,14 @@
 import './style.css';
 import {
   getAnimeDomains,
-  getTelegramSettings,
-  getYouTubeChannels,
-  removeYouTubeChannel,
   setAnimeDomains,
+  getTelegramSettings,
   setTelegramSettings,
+  getDiscordSettings,
+  setDiscordSettings,
+  getYouTubeChannels,
   upsertYouTubeChannel,
+  removeYouTubeChannel,
   getMediaStorage,
   clearMediaStorage,
   importMediaItems,
@@ -16,6 +18,7 @@ import { normalizeCurrentDomainInput } from './utils/formatters';
 import { createAnimeDomainsSection } from './components/settings/CustomDomainSettings';
 import { createYouTubeChannelsSection } from './components/settings/YouTubeSettings';
 import { createTelegramSettingsSection } from './components/settings/TelegramSettings';
+import { createDiscordSettingsSection } from './components/settings/DiscordSettings';
 import { createDataManagementSection } from './components/settings/DataSettings';
 import type { AnimeDomainDraft, YouTubeChannelDraft } from './state';
 import type { AnimeDomain, MediaItem } from './types/media';
@@ -160,12 +163,11 @@ async function requestAnimeDomainPermission(currentDomain: string): Promise<stri
 }
 
 async function renderOptions(): Promise<void> {
-  const [youtubeChannels, animeDomains, telegramSettings, storage] = await Promise.all([
-    getYouTubeChannels(),
-    getAnimeDomains(),
-    getTelegramSettings(),
-    getMediaStorage(),
-  ]);
+  const youtubeChannels = await getYouTubeChannels();
+  const animeDomains = await getAnimeDomains();
+  const telegramSettings = await getTelegramSettings();
+  const discordSettings = await getDiscordSettings();
+  const storage = await getMediaStorage();
 
   optionsRoot.replaceChildren();
 
@@ -360,6 +362,21 @@ async function renderOptions(): Promise<void> {
         },
         onTest: () => {
           chrome.runtime.sendMessage({ type: 'anime-watch-tracker:test-telegram' });
+        }
+      }),
+      createDiscordSettingsSection({
+        settings: discordSettings,
+        onToggle: (enabled) => {
+          void setDiscordSettings({ ...discordSettings, enabled });
+        },
+        onSave: (webhookUrl) => {
+          void setDiscordSettings({ enabled: discordSettings.enabled, webhookUrl }).then(() => {
+            window.alert('Discord Webhook saved!');
+            void renderOptions();
+          });
+        },
+        onTest: () => {
+          chrome.runtime.sendMessage({ type: 'anime-watch-tracker:test-discord' });
         }
       })
     );

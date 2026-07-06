@@ -43,6 +43,8 @@ export function createTelegramSettingsSection({
   const container = document.createElement('div');
   container.className = 'telegram-settings-container';
   container.style.marginTop = '0';
+  container.style.flex = '1';
+  container.style.width = '100%';
 
   const usernameGroup = document.createElement('div');
   usernameGroup.style.display = 'flex';
@@ -140,6 +142,7 @@ export function createTelegramSettingsSection({
 
   const actions = document.createElement('div');
   actions.className = 'domain-form-actions';
+  actions.style.marginTop = 'auto';
 
   const saveBtn = createButton('Save Settings', () => {
     onSave(chatInput.value.trim(), usernameInput.value.trim());
