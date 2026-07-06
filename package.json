@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && vite build --config vite.content.config.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check-duplicates": "tsx scripts/checkDuplicateFunctions.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.29",
     "@types/node": "^25.8.0",
+    "ts-morph": "^28.0.0",
+    "tsx": "^4.23.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
   }
