@@ -134,10 +134,17 @@ async function checkNewEpisodes(): Promise<void> {
         const latestAiredEpNum = nextEpNum - 1;
         const latestAiredEpStr = `Episode ${latestAiredEpNum}`;
 
+        const userWatchedEpMatch = item.episode?.match(/\d+/);
+        const userWatchedEpNum = userWatchedEpMatch ? parseInt(userWatchedEpMatch[0], 10) : 0;
+
         // Save the FUTURE airing time so we don't hit the API again until this time passes
         item.nextEpisodeAvailableAt = new Date(anilistResult.nextAiringEpisode.airingAt * 1000).toISOString();
 
-        if (latestAiredEpNum > 0 && item.lastNotifiedEpisode !== latestAiredEpStr) {
+        if (
+          latestAiredEpNum > 0 &&
+          latestAiredEpNum > userWatchedEpNum &&
+          item.lastNotifiedEpisode !== latestAiredEpStr
+        ) {
           item.lastNotifiedEpisode = latestAiredEpStr;
           updated = true;
           newlyReleased.push({

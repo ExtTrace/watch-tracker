@@ -537,10 +537,7 @@ function extractEpisodeEntries(root: ParentNode): EpisodeEntry[] {
   const selectors = [
     '[data-uia*="episode"]',
     '[class*="episode"]',
-    'li',
-    'button',
-    'article',
-    '[role="button"]',
+    '[class*="titleCard"]',
   ];
   const candidates = root.querySelectorAll<Element>(selectors.join(','));
   const entriesByNumber = new Map<number, EpisodeEntry>();
@@ -1067,7 +1064,7 @@ function splitCombinedTitleCandidate(text: string): {
 function collectFallbackCombinedCandidates(): string[] {
   const results = new Set<string>();
   const attributeCandidates = getAttributeTextsFromSelectors(
-    ['a', '[aria-label]', '[title]', 'img[alt]', '[data-uia]'],
+    ['[data-uia*="title"]', '[data-uia*="episode"]'],
     ['aria-label', 'title', 'alt'],
   );
 
@@ -1076,47 +1073,6 @@ function collectFallbackCombinedCandidates(): string[] {
     if (findEpisodeMarkerIndex(normalized) > 0) {
       results.add(normalized);
     }
-  }
-
-  if (!document.body) {
-    return [...results];
-  }
-
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      if (!parent) {
-        return NodeFilter.FILTER_REJECT;
-      }
-
-      const tagName = parent.tagName.toLowerCase();
-      if (tagName === 'script' || tagName === 'style' || tagName === 'noscript') {
-        return NodeFilter.FILTER_REJECT;
-      }
-
-      const text = cleanText(node.textContent);
-      if (!text || text.length < 4 || text.length > 200) {
-        return NodeFilter.FILTER_REJECT;
-      }
-
-      if (findEpisodeMarkerIndex(normalizeMetadataText(text)) <= 0) {
-        return NodeFilter.FILTER_REJECT;
-      }
-
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-
-  let currentNode = walker.nextNode();
-  let count = 0;
-  while (currentNode && count < 400) {
-    const text = cleanText(currentNode.textContent);
-    if (text) {
-      results.add(normalizeMetadataText(text));
-    }
-
-    currentNode = walker.nextNode();
-    count += 1;
   }
 
   return [...results];
