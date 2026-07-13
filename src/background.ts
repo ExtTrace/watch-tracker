@@ -4,6 +4,10 @@ import { sendTelegramNotification } from './utils/telegram';
 import { searchAniListAnime } from './utils/anilist';
 import { dateFormatter } from './utils/formatters';
 import { sendDiscordNotification } from './utils/discord';
+import { pullFromCloud, pushToCloud } from './utils/sync';
+import { STORAGE_KEY } from './constants/storage';
+
+let isPulling = false;
 
 
 
@@ -117,11 +121,15 @@ function scheduleDailyDigest(): void {
 chrome.runtime.onInstalled.addListener(() => {
   runMigration('onInstalled');
   scheduleDailyDigest();
+  isPulling = true;
+  pullFromCloud().finally(() => { isPulling = false; });
 });
 
 chrome.runtime.onStartup.addListener(() => {
   runMigration('onStartup');
   scheduleDailyDigest();
+  isPulling = true;
+  pullFromCloud().finally(() => { isPulling = false; });
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -334,4 +342,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
   return true;
+});
+
+chrome.storage.local.onChanged.addListener((changes) => {
+  if (changes[STORAGE_KEY] && !isPulling) {
+    void pushToCloud();
+  }
 });

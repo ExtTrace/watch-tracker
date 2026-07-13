@@ -16,6 +16,7 @@ import {
   getCloudSettings,
   setCloudSettings
 } from './utils/storage';
+import { pushToCloud, pullFromCloud } from './utils/sync';
 import { normalizeCurrentDomainInput } from './utils/formatters';
 import { createAnimeDomainsSection } from './components/settings/CustomDomainSettings';
 import { createYouTubeChannelsSection } from './components/settings/YouTubeSettings';
@@ -36,6 +37,7 @@ const state = {
   animeDomainRequestPermission: false,
   youtubeChannelDraft: { id: null, name: '', handle: '' } as YouTubeChannelDraft,
   youtubeChannelModalOpen: false,
+  cloudSyncModalOpen: false,
 };
 
 function normalizeDomainInput(value: string): string {
@@ -399,8 +401,30 @@ async function renderOptions(): Promise<void> {
 
     const cloudSection = createCloudSettingsSection({
       settings: cloudSettings,
-      onToggle: (enabled) => {
-        void setCloudSettings({ ...cloudSettings, enabled }).then(() => renderOptions());
+      isModalOpen: state.cloudSyncModalOpen,
+      onOpenModal: () => {
+        state.cloudSyncModalOpen = true;
+        void renderOptions();
+      },
+      onCloseModal: () => {
+        state.cloudSyncModalOpen = false;
+        void renderOptions();
+      },
+      onSave: (newSettings) => {
+        const wasEnabled = cloudSettings.enabled;
+        const syncIdChanged = newSettings.syncId !== cloudSettings.syncId;
+
+        void setCloudSettings(newSettings).then(() => {
+          // Push immediately when user enables Cloud Sync
+          if (!wasEnabled && newSettings.enabled) {
+            void pushToCloud();
+          }
+          // Pull immediately when user links a new device (Sync ID changed)
+          if (syncIdChanged && newSettings.syncId) {
+            void pullFromCloud();
+          }
+          void renderOptions();
+        });
       }
     });
 

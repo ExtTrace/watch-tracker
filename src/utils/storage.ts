@@ -927,15 +927,22 @@ export function getCloudSettings(): Promise<CloudSettings> {
   return new Promise((resolve) => {
     const storageArea = getStorageArea();
     if (!storageArea) {
-      resolve({ enabled: false });
+      resolve({ enabled: false, syncId: null });
       return;
     }
     storageArea.get([CLOUD_SETTINGS_KEY], (result) => {
-      resolve(
-        (result[CLOUD_SETTINGS_KEY] as CloudSettings) || {
-          enabled: false,
-        }
-      );
+      const stored = result[CLOUD_SETTINGS_KEY] as CloudSettings | undefined;
+      const settings = {
+        enabled: stored?.enabled ?? false,
+        syncId: stored?.syncId ?? null,
+      };
+
+      if (!settings.syncId) {
+        settings.syncId = `awt-sync-${crypto.randomUUID()}`;
+        void setCloudSettings(settings);
+      }
+
+      resolve(settings);
     });
   });
 }
