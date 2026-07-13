@@ -53,6 +53,10 @@ export interface DiscordSettings {
   enabled: boolean;
 }
 
+export interface CloudSettings {
+  enabled: boolean;
+}
+
 export interface MediaStorage {
   items: MediaItem[];
 }

@@ -5,4 +5,5 @@ export const LAST_FILTER_KEY = 'lastFilter';
 export const LAST_SETTINGS_VIEW_KEY = 'lastSettingsView';
 export const TELEGRAM_SETTINGS_KEY = 'telegramSettings';
 export const DISCORD_SETTINGS_KEY = 'discordSettings';
+export const CLOUD_SETTINGS_KEY = 'cloudSettings';
 export const STORAGE_WARN_PREFIX = '[Anime Watch Tracker]';

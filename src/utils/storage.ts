@@ -1,5 +1,6 @@
 import {
   ANIME_DOMAINS_KEY,
+  CLOUD_SETTINGS_KEY,
   DISCORD_SETTINGS_KEY,
   LAST_FILTER_KEY,
   LAST_SETTINGS_VIEW_KEY,
@@ -11,6 +12,7 @@ import {
 import type {
   AllowedYouTubeChannel,
   AnimeDomain,
+  CloudSettings,
   LegacyNetflixItem,
   MediaItem,
   DiscordSettings,
@@ -917,6 +919,39 @@ export function getLastFilter(): Promise<string> {
     }
     storageArea.get([LAST_FILTER_KEY], (result) => {
       resolve((result[LAST_FILTER_KEY] as string) || 'all');
+    });
+  });
+}
+
+export function getCloudSettings(): Promise<CloudSettings> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve({ enabled: false });
+      return;
+    }
+    storageArea.get([CLOUD_SETTINGS_KEY], (result) => {
+      resolve(
+        (result[CLOUD_SETTINGS_KEY] as CloudSettings) || {
+          enabled: false,
+        }
+      );
+    });
+  });
+}
+
+export function setCloudSettings(settings: CloudSettings): Promise<void> {
+  return new Promise((resolve) => {
+    const storageArea = getStorageArea();
+    if (!storageArea) {
+      resolve();
+      return;
+    }
+    storageArea.set({ [CLOUD_SETTINGS_KEY]: settings }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn(`${STORAGE_WARN_PREFIX} ${chrome.runtime.lastError.message}`);
+      }
+      resolve();
     });
   });
 }

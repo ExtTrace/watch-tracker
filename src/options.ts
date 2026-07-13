@@ -12,7 +12,9 @@ import {
   getMediaStorage,
   clearMediaStorage,
   importMediaItems,
-  normalizeChannelHandle
+  normalizeChannelHandle,
+  getCloudSettings,
+  setCloudSettings
 } from './utils/storage';
 import { normalizeCurrentDomainInput } from './utils/formatters';
 import { createAnimeDomainsSection } from './components/settings/CustomDomainSettings';
@@ -20,6 +22,7 @@ import { createYouTubeChannelsSection } from './components/settings/YouTubeSetti
 import { createTelegramSettingsSection } from './components/settings/TelegramSettings';
 import { createDiscordSettingsSection } from './components/settings/DiscordSettings';
 import { createDataManagementSection } from './components/settings/DataSettings';
+import { createCloudSettingsSection } from './components/settings/CloudSettings';
 import type { AnimeDomainDraft, YouTubeChannelDraft } from './state';
 import type { AnimeDomain, MediaItem } from './types/media';
 
@@ -167,6 +170,7 @@ async function renderOptions(): Promise<void> {
   const animeDomains = await getAnimeDomains();
   const telegramSettings = await getTelegramSettings();
   const discordSettings = await getDiscordSettings();
+  const cloudSettings = await getCloudSettings();
   const storage = await getMediaStorage();
 
   optionsRoot.replaceChildren();
@@ -388,6 +392,18 @@ async function renderOptions(): Promise<void> {
     contentTitle.textContent = 'Data Management';
     header.append(contentTitle);
 
+
+
+    const dataSectionGrid = document.createElement('div');
+    dataSectionGrid.className = 'channel-grid';
+
+    const cloudSection = createCloudSettingsSection({
+      settings: cloudSettings,
+      onToggle: (enabled) => {
+        void setCloudSettings({ ...cloudSettings, enabled }).then(() => renderOptions());
+      }
+    });
+
     const importInput = document.createElement('input');
     importInput.type = 'file';
     importInput.accept = 'application/json,.json';
@@ -403,9 +419,6 @@ async function renderOptions(): Promise<void> {
         .finally(() => { importInput.value = ''; });
     });
 
-    const dataSectionGrid = document.createElement('div');
-    dataSectionGrid.className = 'channel-grid';
-
     const dataSection = createDataManagementSection({
       onImportClick: () => importInput.click(),
       onExportClick: () => downloadJsonFile(storage.items),
@@ -414,7 +427,7 @@ async function renderOptions(): Promise<void> {
       },
     });
 
-    dataSectionGrid.append(dataSection);
+    dataSectionGrid.append(cloudSection, dataSection);
 
     content.append(header, dataSectionGrid, importInput);
   }

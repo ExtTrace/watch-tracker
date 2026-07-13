@@ -94,17 +94,38 @@ function runMigration(reason: string): void {
   });
 }
 
+function scheduleDailyDigest(): void {
+  // Clear any existing legacy alarm
+  chrome.alarms.clear('anime-episode-checker', () => {});
+
+  // Calculate the next 19:00 WIB (12:00 UTC)
+  const now = new Date();
+  const nextTarget = new Date();
+  nextTarget.setUTCHours(12, 0, 0, 0);
+
+  // If we already passed 12:00 UTC today, set it for tomorrow
+  if (now.getTime() > nextTarget.getTime()) {
+    nextTarget.setDate(nextTarget.getDate() + 1);
+  }
+
+  chrome.alarms.create('anime-daily-digest', {
+    when: nextTarget.getTime(),
+    periodInMinutes: 24 * 60 // Repeat every 24 hours
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   runMigration('onInstalled');
-  chrome.alarms.create('anime-episode-checker', { periodInMinutes: 60 });
+  scheduleDailyDigest();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   runMigration('onStartup');
+  scheduleDailyDigest();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'anime-episode-checker') {
+  if (alarm.name === 'anime-daily-digest') {
     void checkNewEpisodes();
   }
 });
@@ -207,9 +228,11 @@ async function checkNewEpisodes(): Promise<void> {
   }
 
   if (fullMessage.trim()) {
+    const finalMessage = `🌙 <b>Anime Daily Digest</b>\n\n${fullMessage.trim()}`;
+    
     if (settings.enabled && settings.chatId) {
       try {
-        await sendTelegramNotification(settings.chatId, fullMessage.trim());
+        await sendTelegramNotification(settings.chatId, finalMessage);
       } catch (err) {
         console.error('Failed to notify telegram', err);
       }
@@ -217,7 +240,7 @@ async function checkNewEpisodes(): Promise<void> {
 
     if (discordSettings.enabled && discordSettings.webhookUrl) {
       try {
-        await sendDiscordNotification(discordSettings.webhookUrl, fullMessage.trim());
+        await sendDiscordNotification(discordSettings.webhookUrl, finalMessage);
       } catch (err) {
         console.error('Failed to notify discord', err);
       }
