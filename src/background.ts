@@ -102,10 +102,10 @@ function scheduleDailyDigest(): void {
   // Clear any existing legacy alarm
   chrome.alarms.clear('anime-episode-checker', () => {});
 
-  // Calculate the next 19:00 WIB (12:00 UTC)
+  // Calculate the next 12:00 WIB (05:00 UTC)
   const now = new Date();
   const nextTarget = new Date();
-  nextTarget.setUTCHours(12, 0, 0, 0);
+  nextTarget.setUTCHours(5, 0, 0, 0);
 
   // If we already passed 12:00 UTC today, set it for tomorrow
   if (now.getTime() > nextTarget.getTime()) {
