@@ -520,44 +520,78 @@ export function getMediaStorage(): Promise<MediaStorage> {
 
 export async function upsertMediaItem(item: MediaItem): Promise<void> {
   const currentStorage = await getMediaStorage();
-  const nextItems = currentStorage.items.filter((existingItem) => {
-    if (existingItem.id === item.id) {
-      return false;
-    }
-
-    if (
-      item.platform === 'youtube' &&
-      (item.seriesKey ?? createYouTubeSeriesKey(item.title)) &&
-      existingItem.platform === 'youtube'
-    ) {
+  
+  // Find existing item
+  const existingItem = currentStorage.items.find((existingItem) => {
+    if (existingItem.id === item.id) return true;
+    
+    if (item.platform === 'youtube' && existingItem.platform === 'youtube') {
       const currentSeriesKey = item.seriesKey ?? createYouTubeSeriesKey(item.title);
-      const existingSeriesKey =
-        existingItem.seriesKey ?? createYouTubeSeriesKey(existingItem.title);
-
-      if (existingSeriesKey === currentSeriesKey) {
-        return false;
-      }
+      const existingSeriesKey = existingItem.seriesKey ?? createYouTubeSeriesKey(existingItem.title);
+      if (existingSeriesKey === currentSeriesKey) return true;
     }
-
-    if (
-      item.platform === 'custom' &&
-      (item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title)) &&
-      existingItem.platform === 'custom'
-    ) {
-      const currentSeriesKey =
-        item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title);
-      const existingSeriesKey =
-        existingItem.seriesKey ??
-        createCustomSeriesKey(existingItem.hostname ?? '', existingItem.title);
-
-      if (existingSeriesKey === currentSeriesKey) {
-        return false;
-      }
+    
+    if (item.platform === 'custom' && existingItem.platform === 'custom') {
+      const currentSeriesKey = item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title);
+      const existingSeriesKey = existingItem.seriesKey ?? createCustomSeriesKey(existingItem.hostname ?? '', existingItem.title);
+      if (existingSeriesKey === currentSeriesKey) return true;
     }
+    
+    return false;
+  });
 
+  // Filter out matching existing items from nextItems
+  const nextItems = currentStorage.items.filter((existingItem) => {
+    if (existingItem.id === item.id) return false;
+    
+    if (item.platform === 'youtube' && existingItem.platform === 'youtube') {
+      const currentSeriesKey = item.seriesKey ?? createYouTubeSeriesKey(item.title);
+      const existingSeriesKey = existingItem.seriesKey ?? createYouTubeSeriesKey(existingItem.title);
+      if (existingSeriesKey === currentSeriesKey) return false;
+    }
+    
+    if (item.platform === 'custom' && existingItem.platform === 'custom') {
+      const currentSeriesKey = item.seriesKey ?? createCustomSeriesKey(item.hostname ?? '', item.title);
+      const existingSeriesKey = existingItem.seriesKey ?? createCustomSeriesKey(existingItem.hostname ?? '', existingItem.title);
+      if (existingSeriesKey === currentSeriesKey) return false;
+    }
+    
     return true;
   });
-  nextItems.push(item);
+
+  let mergedItem = item;
+  if (existingItem) {
+    mergedItem = {
+      ...existingItem,
+      ...item,
+    };
+
+    // If user watched an episode equal to or greater than the notified next episode, clear hasNewEpisode
+    let hasNewEpisode = existingItem.hasNewEpisode ?? false;
+    
+    const userWatchedEpMatch = item.episode?.match(/\d+/);
+    const userWatchedEpNum = userWatchedEpMatch ? parseInt(userWatchedEpMatch[0], 10) : 0;
+
+    if (existingItem.lastNotifiedEpisode) {
+      const notifiedEpMatch = existingItem.lastNotifiedEpisode.match(/\d+/);
+      const notifiedEpNum = notifiedEpMatch ? parseInt(notifiedEpMatch[0], 10) : 0;
+      if (userWatchedEpNum >= notifiedEpNum) {
+        hasNewEpisode = false;
+      }
+    }
+    
+    if (existingItem.nextEpisode) {
+      const nextEpMatch = existingItem.nextEpisode.match(/\d+/);
+      const nextEpNum = nextEpMatch ? parseInt(nextEpMatch[0], 10) : 0;
+      if (userWatchedEpNum >= nextEpNum) {
+        hasNewEpisode = false;
+      }
+    }
+
+    mergedItem.hasNewEpisode = hasNewEpisode;
+  }
+
+  nextItems.push(mergedItem);
   nextItems.sort(
     (left, right) => Date.parse(right.lastWatchedAt) - Date.parse(left.lastWatchedAt),
   );

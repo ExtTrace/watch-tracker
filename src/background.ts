@@ -201,6 +201,7 @@ async function checkNewEpisodes(): Promise<void> {
           item.lastNotifiedEpisode !== latestAiredEpStr
         ) {
           item.lastNotifiedEpisode = latestAiredEpStr;
+          item.hasNewEpisode = true;
           updated = true;
           newlyReleased.push({
             title: item.title,
