@@ -961,14 +961,15 @@ export function getCloudSettings(): Promise<CloudSettings> {
   return new Promise((resolve) => {
     const storageArea = getStorageArea();
     if (!storageArea) {
-      resolve({ enabled: false, syncId: null });
+      resolve({ enabled: false, syncId: null, useCloudCron: false });
       return;
     }
     storageArea.get([CLOUD_SETTINGS_KEY], (result) => {
       const stored = result[CLOUD_SETTINGS_KEY] as CloudSettings | undefined;
-      const settings = {
+      const settings: CloudSettings = {
         enabled: stored?.enabled ?? false,
         syncId: stored?.syncId ?? null,
+        useCloudCron: stored?.useCloudCron ?? false,
       };
 
       if (!settings.syncId) {

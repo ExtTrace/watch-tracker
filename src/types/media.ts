@@ -56,6 +56,7 @@ export interface DiscordSettings {
 export interface CloudSettings {
   enabled: boolean;
   syncId: string | null;
+  useCloudCron: boolean;
 }
 
 export interface MediaStorage {

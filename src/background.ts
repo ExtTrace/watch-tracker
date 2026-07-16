@@ -1,11 +1,11 @@
-import { getAnimeDomains, setAnimeDomains, getMediaStorage, setMediaStorage, getTelegramSettings, getDiscordSettings, migrateStorage } from './utils/storage';
+import { getAnimeDomains, setAnimeDomains, getMediaStorage, setMediaStorage, getTelegramSettings, getDiscordSettings, migrateStorage, getCloudSettings } from './utils/storage';
 import { normalizeHostname } from './utils/id';
 import { sendTelegramNotification } from './utils/telegram';
 import { searchAniListAnime } from './utils/anilist';
 import { dateFormatter } from './utils/formatters';
 import { sendDiscordNotification } from './utils/discord';
 import { pullFromCloud, pushToCloud } from './utils/sync';
-import { STORAGE_KEY } from './constants/storage';
+import { STORAGE_KEY, TELEGRAM_SETTINGS_KEY, DISCORD_SETTINGS_KEY, CLOUD_SETTINGS_KEY } from './constants/storage';
 
 let isPulling = false;
 
@@ -139,6 +139,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 async function checkNewEpisodes(): Promise<void> {
+  const cloudSettings = await getCloudSettings();
+  if (cloudSettings.enabled && cloudSettings.useCloudCron) {
+    console.info('[Anime Watch Tracker] Skipping local daily digest check (handled by Cloud Cron)');
+    return;
+  }
+
   const settings = await getTelegramSettings();
   const discordSettings = await getDiscordSettings();
 
@@ -346,7 +352,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 chrome.storage.local.onChanged.addListener((changes) => {
-  if (changes[STORAGE_KEY] && !isPulling) {
+  const keysToSync = [STORAGE_KEY, TELEGRAM_SETTINGS_KEY, DISCORD_SETTINGS_KEY, CLOUD_SETTINGS_KEY];
+  const hasChanged = keysToSync.some((key) => changes[key] !== undefined);
+  if (hasChanged && !isPulling) {
     void pushToCloud();
   }
 });

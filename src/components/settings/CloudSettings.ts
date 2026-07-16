@@ -32,15 +32,12 @@ export function createCloudSettingsSection({
   desc.className = 'channel-item-meta';
   desc.textContent = 'Secara otomatis mensinkronkan progress tontonan Anda ke cloud antar perangkat.';
 
-  const actions = document.createElement('div');
-  actions.className = 'channel-item-actions';
-  actions.style.justifyContent = 'flex-start';
-  actions.style.alignItems = 'center';
-  actions.style.gap = '16px';
-
   const enabledToggle = document.createElement('label');
   enabledToggle.className = 'domain-permission-toggle';
   enabledToggle.style.margin = '0';
+  enabledToggle.style.display = 'flex';
+  enabledToggle.style.alignItems = 'center';
+  enabledToggle.style.gap = '8px';
 
   const enabledCheckbox = document.createElement('input');
   enabledCheckbox.type = 'checkbox';
@@ -54,12 +51,44 @@ export function createCloudSettingsSection({
 
   enabledToggle.append(enabledCheckbox, enabledText);
 
+  const cronToggle = document.createElement('label');
+  cronToggle.className = 'domain-permission-toggle';
+  cronToggle.style.margin = '0';
+  cronToggle.style.display = 'flex';
+  cronToggle.style.alignItems = 'center';
+  cronToggle.style.gap = '8px';
+
+  const cronCheckbox = document.createElement('input');
+  cronCheckbox.type = 'checkbox';
+  cronCheckbox.checked = settings.useCloudCron;
+  cronCheckbox.disabled = !settings.enabled;
+  cronCheckbox.addEventListener('change', () => {
+    onSave({ ...settings, useCloudCron: cronCheckbox.checked });
+  });
+
+  const cronText = document.createElement('span');
+  cronText.textContent = 'Use Cloud Cron (24/7)';
+
+  cronToggle.append(cronCheckbox, cronText);
+
+  const togglesContainer = document.createElement('div');
+  togglesContainer.style.display = 'flex';
+  togglesContainer.style.flexDirection = 'column';
+  togglesContainer.style.gap = '8px';
+  togglesContainer.style.margin = '4px 0';
+  togglesContainer.append(enabledToggle, cronToggle);
+
   const linkBtn = createButton('Link Device', () => {
     onOpenModal();
   });
 
-  actions.append(enabledToggle, linkBtn);
-  card.append(title, desc, actions);
+  const actions = document.createElement('div');
+  actions.className = 'channel-item-actions';
+  actions.style.justifyContent = 'flex-start';
+  actions.style.marginTop = 'auto'; // push button to the bottom
+  actions.append(linkBtn);
+
+  card.append(title, desc, togglesContainer, actions);
   wrapper.append(card);
 
   if (isModalOpen) {
