@@ -7,6 +7,7 @@ import {
   setMediaItemArchived,
   getLastFilter,
   setLastFilter,
+  upsertMediaItem,
 } from './utils/storage';
 import {
   state,
@@ -14,7 +15,11 @@ import {
   type ViewValue,
 } from './state';
 import { createHistoryTab } from './components/HistoryTab';
+import { createEditMediaModal } from './components/EditMediaModal';
 import { ICONS } from './ui/helpers';
+import type { MediaItem } from './types/media';
+
+let editingItem: MediaItem | null = null;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -123,8 +128,29 @@ async function renderPopup(): Promise<void> {
           await setMediaItemArchived(id, isArchived);
           await renderPopup();
         },
+        onEditItem: (item) => {
+          editingItem = item;
+          void renderPopup();
+        },
         onDelete: async (id) => {
           await removeMediaItem(id);
+          await renderPopup();
+        },
+      })
+    );
+  }
+
+  if (editingItem) {
+    container.append(
+      createEditMediaModal({
+        item: editingItem,
+        onCloseModal: () => {
+          editingItem = null;
+          void renderPopup();
+        },
+        onSave: async (updatedItem) => {
+          await upsertMediaItem(updatedItem);
+          editingItem = null;
           await renderPopup();
         },
       })

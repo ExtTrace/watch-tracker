@@ -14,6 +14,7 @@ type HistoryTabProps = {
   view: ViewValue; // 'history' | 'archives'
   onOpenUrl: (url: string) => void;
   onToggleArchive: (id: string, isArchived: boolean) => Promise<void>;
+  onEditItem: (item: MediaItem) => void;
   onDelete: (id: string) => Promise<void>;
 };
 
@@ -23,6 +24,7 @@ export function createHistoryTab({
   view,
   onOpenUrl,
   onToggleArchive,
+  onEditItem,
   onDelete,
 }: HistoryTabProps): HTMLElement {
   const content = document.createElement('section');
@@ -43,7 +45,7 @@ export function createHistoryTab({
     }
   } else {
     for (const item of filteredItems) {
-      content.append(createWatchCard(item, onOpenUrl, onToggleArchive, onDelete));
+      content.append(createWatchCard(item, onOpenUrl, onToggleArchive, onEditItem, onDelete));
     }
   }
 
@@ -93,6 +95,7 @@ function createWatchCard(
   item: MediaItem,
   onOpenUrl: (url: string) => void,
   onToggleArchive: (id: string, isArchived: boolean) => Promise<void>,
+  onEditItem: (item: MediaItem) => void,
   onDelete: (id: string) => Promise<void>
 ): HTMLElement {
   const card = document.createElement('article');
@@ -159,6 +162,13 @@ function createWatchCard(
 
   footer.append(
     mainAction,
+    createIconButton(
+      ICONS.edit,
+      () => {
+        onEditItem(item);
+      },
+      'secondary'
+    ),
     createIconButton(
       item.isArchived ? ICONS.unarchive : ICONS.archive,
       () => {
